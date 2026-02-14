@@ -1,0 +1,71 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Shop {
+  id              String             @id @default(cuid())
+  shopDomain      String             @unique // e.g. my-store.myshopify.com
+  name            String?
+  accessToken     String
+  plan            Plan?
+  draftOrderUsage DraftOrderUsage[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+}
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model DraftOrderUsage {
+  id            String   @id @default(cuid())
+  shop          Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId        String
+  draftOrderGid String   // e.g. "gid://shopify/DraftOrder/123456"
+  editedAt      DateTime @default(now())
+
+  @@unique([shopId, draftOrderGid])
+  @@index([shopId, editedAt])
+}
+
+model Plan {
+  id                    String    @id @default(cuid())
+  shop                  Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId                String    @unique
+  name                  String?
+  status                String    @default("inactive") // inactive, trial, active, cancelled, expired
+  trialStartDate        DateTime?
+  trialEndDate          DateTime?
+  currentPeriodStart    DateTime?
+  currentPeriodEnd      DateTime?
+  shopifySubscriptionId String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
