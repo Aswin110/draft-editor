@@ -1,19 +1,73 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { Outlet, useLoaderData, useRouteError } from "react-router";
+import { useEffect } from "react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
 import { authenticate } from "../shopify.server";
+import { MONTHLY_PLAN, ANNUAL_PLAN } from "../constants/plans";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { admin, billing, session } = await authenticate.admin(request);
+
+  const response = await admin.graphql(
+    `{ shop { name contactEmail shopOwnerName } }`,
+  );
+  const { data } = await response.json();
+
+  const { appSubscriptions } = await billing.check({
+    plans: [MONTHLY_PLAN, ANNUAL_PLAN],
+    isTest: true,
+  });
+  const currentPlan =
+    appSubscriptions.length > 0 ? appSubscriptions[0].name : "Free";
 
   // eslint-disable-next-line no-undef
-  return { apiKey: process.env.SHOPIFY_API_KEY || "" };
+  return {
+    apiKey: process.env.SHOPIFY_API_KEY || "",
+    shopName: data.shop.name as string,
+    ownerName: data.shop.shopOwnerName as string,
+    ownerEmail: data.shop.contactEmail as string,
+    shopDomain: session.shop,
+    currentPlan,
+  };
 };
 
+const CRISP_WEBSITE_ID = "36f18c89-59c6-466f-8523-fc8023bd3a7c";
+
 const App = () => {
-  const { apiKey } = useLoaderData<typeof loader>();
+  const { apiKey, shopName, ownerName, ownerEmail, shopDomain, currentPlan } =
+    useLoaderData<typeof loader>();
+
+  useEffect(() => {
+    if (window.$crisp) return;
+    window.$crisp = [];
+    window.CRISP_WEBSITE_ID = CRISP_WEBSITE_ID;
+    const script = document.createElement("script");
+    script.src = "https://client.crisp.chat/l.js";
+    script.async = true;
+    script.onload = () => {
+      window.$crisp.push(["set", "user:nickname", [ownerName]]);
+      window.$crisp.push(["set", "user:email", [ownerEmail]]);
+      window.$crisp.push(["set", "user:company", [shopName]]);
+      window.$crisp.push([
+        "set",
+        "session:segments",
+        [["draft-edit"]],
+      ]);
+      window.$crisp.push([
+        "set",
+        "session:data",
+        [
+          [
+            ["shop", shopDomain],
+            ["plan", currentPlan],
+          ],
+        ],
+      ]);
+    };
+    document.head.appendChild(script);
+  }, [shopName, shopDomain, currentPlan, ownerName, ownerEmail]);
 
   return (
     <AppProvider embedded apiKey={apiKey}>
