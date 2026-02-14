@@ -7,7 +7,6 @@ import {
   getDraftOrder,
   updateDraftOrderLineItems,
 } from "../models/draft-order.server";
-import { canEditDraftOrder } from "../models/usage.server";
 import {
   formatAddressLines,
   buildShopifyGid,
@@ -18,8 +17,6 @@ import { CustomerCard } from "../components/CustomerCard";
 import { LineItemRow } from "../components/LineItemRow";
 import { NotesCard } from "../components/NotesCard";
 import { PaymentSummary } from "../components/PaymentSummary";
-import { UpgradeBanner } from "../components/UpgradeBanner";
-import { MONTHLY_PLAN, ANNUAL_PLAN } from "../constants/plans";
 import type {
   DraftOrderDetail as DraftOrderDetailType,
   LineItem,
@@ -27,14 +24,10 @@ import type {
 
 interface LoaderData {
   draftOrder: DraftOrderDetailType;
-  canEdit: boolean;
-  usedCount: number;
-  limit: number;
-  hasActivePlan: boolean;
 }
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { admin, billing } = await authenticate.admin(request);
+  const { admin } = await authenticate.admin(request);
   const { id } = params;
 
   const draftOrderGid = buildShopifyGid("DraftOrder", id!);
@@ -44,28 +37,11 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Draft order not found", { status: 404 });
   }
 
-  const { hasActivePayment } = await billing.check({
-    plans: [MONTHLY_PLAN, ANNUAL_PLAN],
-    isTest: true,
-  });
-
-  const { allowed, monthlyCount, limit } = await canEditDraftOrder(
-    admin,
-    draftOrderGid,
-    hasActivePayment,
-  );
-
-  return {
-    draftOrder,
-    canEdit: allowed,
-    usedCount: monthlyCount,
-    limit,
-    hasActivePlan: hasActivePayment,
-  };
+  return { draftOrder };
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
-  const { admin, billing } = await authenticate.admin(request);
+  const { admin } = await authenticate.admin(request);
   const { id } = params;
   const formData = await request.formData();
   const lineItemsJson = formData.get("lineItems") as string;
@@ -76,23 +52,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
 
   const draftOrderGid = buildShopifyGid("DraftOrder", id!);
-
-  // Server-side usage limit enforcement
-  const { hasActivePayment } = await billing.check({
-    plans: [MONTHLY_PLAN, ANNUAL_PLAN],
-    isTest: true,
-  });
-
-  if (!hasActivePayment) {
-    const { allowed } = await canEditDraftOrder(admin, draftOrderGid, false);
-    if (!allowed) {
-      return {
-        success: false,
-        error:
-          "Free plan edit limit reached. Please upgrade to continue editing draft orders.",
-      };
-    }
-  }
 
   const lineItems: {
     variantId: string | null;
@@ -114,9 +73,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 };
 
 const DraftOrderDetailPage = () => {
-  const { draftOrder, canEdit, usedCount, limit, hasActivePlan } =
-    useLoaderData<LoaderData>();
-  const editingDisabled = !canEdit;
+  const { draftOrder } = useLoaderData<LoaderData>();
   const navigate = useNavigate();
   const fetcher = useFetcher<{ success: boolean; error?: string }>();
   const shopify = useAppBridge();
@@ -349,29 +306,19 @@ const DraftOrderDetailPage = () => {
         Open in Shopify
       </s-button>
 
-      {!editingDisabled && (
-        <SaveBar id="product-order-save-bar" open={hasChanges}>
-          <button
-            variant="primary"
-            onClick={handleSave}
-            disabled={isSaving}
-            {...(isSaving ? { loading: "" } : {})}
-          >
-            Save
-          </button>
-          <button onClick={handleDiscard} disabled={isSaving}>
-            Discard
-          </button>
-        </SaveBar>
-      )}
-
-      {editingDisabled && <UpgradeBanner usedCount={usedCount} limit={limit} />}
-
-      {!hasActivePlan && !editingDisabled && (
-        <s-banner tone="info">
-          Free plan: {usedCount} of {limit} draft order edits used this month.
-        </s-banner>
-      )}
+      <SaveBar id="product-order-save-bar" open={hasChanges}>
+        <button
+          variant="primary"
+          onClick={handleSave}
+          disabled={isSaving}
+          {...(isSaving ? { loading: "" } : {})}
+        >
+          Save
+        </button>
+        <button onClick={handleDiscard} disabled={isSaving}>
+          Discard
+        </button>
+      </SaveBar>
 
       <s-section>
         <s-stack direction="block" gap="base">
@@ -381,20 +328,18 @@ const DraftOrderDetailPage = () => {
             alignItems="center"
           >
             <s-heading>Products</s-heading>
-            {!editingDisabled && (
-              <s-stack direction="inline" gap="small" alignItems="center">
-                {lineItems.length > 1 && (
-                  <s-text color="subdued">Drag to reorder</s-text>
-                )}
-                <s-button
-                  icon="plus"
-                  onClick={handleAddProducts}
-                  accessibilityLabel="Add products"
-                >
-                  Add Products
-                </s-button>
-              </s-stack>
-            )}
+            <s-stack direction="inline" gap="small" alignItems="center">
+              {lineItems.length > 1 && (
+                <s-text color="subdued">Drag to reorder</s-text>
+              )}
+              <s-button
+                icon="plus"
+                onClick={handleAddProducts}
+                accessibilityLabel="Add products"
+              >
+                Add Products
+              </s-button>
+            </s-stack>
           </s-stack>
           {fetcher.data?.error && (
             <s-banner tone="critical">{fetcher.data.error}</s-banner>
@@ -428,7 +373,6 @@ const DraftOrderDetailPage = () => {
                       onPriceChange={(price) =>
                         handlePriceChange(item.id, price)
                       }
-                      disabled={editingDisabled}
                     />
                   </s-box>
                 </s-box>
@@ -438,11 +382,9 @@ const DraftOrderDetailPage = () => {
             <s-box padding="base">
               <s-stack alignItems="center" gap="small">
                 <s-text color="subdued">No products yet</s-text>
-                {!editingDisabled && (
-                  <s-button onClick={handleAddProducts} icon="plus">
-                    Add products
-                  </s-button>
-                )}
+                <s-button onClick={handleAddProducts} icon="plus">
+                  Add products
+                </s-button>
               </s-stack>
             </s-box>
           )}

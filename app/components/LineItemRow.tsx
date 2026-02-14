@@ -12,7 +12,6 @@ export interface LineItemRowProps {
   onRemove: () => void;
   onQuantityChange: (quantity: number) => void;
   onPriceChange: (price: string) => void;
-  disabled?: boolean;
 }
 
 export const LineItemRow = ({
@@ -27,7 +26,6 @@ export const LineItemRow = ({
   onRemove,
   onQuantityChange,
   onPriceChange,
-  disabled = false,
 }: LineItemRowProps) => {
   const totalAmount = (
     parseFloat(item.originalUnitPrice || "0") * item.quantity
@@ -53,15 +51,15 @@ export const LineItemRow = ({
 
   return (
     <div
-      draggable={!disabled}
-      onDragStart={disabled ? undefined : onDragStart}
-      onDragOver={disabled ? undefined : onDragOver}
-      onDragLeave={disabled ? undefined : onDragLeave}
-      onDrop={disabled ? undefined : onDrop}
-      onDragEnd={disabled ? undefined : onDragEnd}
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
       style={{
-        cursor: disabled ? "default" : "grab",
-        opacity: isDragging ? 0.5 : disabled ? 0.6 : 1,
+        cursor: "grab",
+        opacity: isDragging ? 0.5 : 1,
         transition: "opacity 0.2s",
       }}
     >
@@ -118,7 +116,6 @@ export const LineItemRow = ({
                 onBlur={handlePriceBlur}
                 min={0}
                 step={0.01}
-                disabled={disabled || undefined}
               ></s-number-field>
             </s-box>
             <s-text color="subdued">×</s-text>
@@ -129,22 +126,19 @@ export const LineItemRow = ({
                 value={item.quantity.toString()}
                 onInput={handleQuantityChange}
                 min={1}
-                disabled={disabled || undefined}
               ></s-number-field>
             </s-box>
             <s-text color="subdued">=</s-text>
             <s-text type="strong">
               {currencyCode} {totalAmount}
             </s-text>
-            {!disabled && (
-              <s-button
-                icon="x"
-                variant="tertiary"
-                tone="critical"
-                onClick={onRemove}
-                accessibilityLabel={`Remove ${item.title}`}
-              ></s-button>
-            )}
+            <s-button
+              icon="x"
+              variant="tertiary"
+              tone="critical"
+              onClick={onRemove}
+              accessibilityLabel={`Remove ${item.title}`}
+            ></s-button>
           </s-stack>
         </s-box>
       </s-stack>

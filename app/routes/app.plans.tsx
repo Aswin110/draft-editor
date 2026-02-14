@@ -7,12 +7,7 @@ import {
 } from "react-router";
 import { useEffect } from "react";
 import { authenticate } from "../shopify.server";
-import {
-  MONTHLY_PLAN,
-  ANNUAL_PLAN,
-  FREE_TIER_EDIT_LIMIT,
-} from "../constants/plans";
-import { getMonthlyUsageStatus } from "../models/usage.server";
+import { MONTHLY_PLAN, ANNUAL_PLAN } from "../constants/plans";
 import type {
   CurrencyCode,
   AppPricingInterval,
@@ -21,7 +16,7 @@ import type {
 const features = ["Unlimited draft order edits", "Priority support"];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, billing } = await authenticate.admin(request);
+  const { billing } = await authenticate.admin(request);
 
   const { hasActivePayment, appSubscriptions } = await billing.check({
     plans: [MONTHLY_PLAN, ANNUAL_PLAN],
@@ -31,17 +26,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const currentPlan =
     appSubscriptions.length > 0 ? appSubscriptions[0].name : null;
 
-  // Get usage info for free tier display
-  let usageInfo = { usedCount: 0, limit: FREE_TIER_EDIT_LIMIT };
-  if (!hasActivePayment) {
-    const status = await getMonthlyUsageStatus(admin);
-    usageInfo = { usedCount: status.totalThisMonth, limit: status.limit };
-  }
-
   return {
     hasActiveSubscription: hasActivePayment,
     currentPlan,
-    usageInfo,
   };
 };
 
@@ -223,7 +210,7 @@ const PlanCard = ({
             }
             disabled={isCurrentPlan || isSubmitting || undefined}
           >
-            {isCurrentPlan ? "Current Plan" : "Start Free Trial"}
+            {isCurrentPlan ? "Current Plan" : "Start 7-Day Free Trial"}
           </s-button>
         </s-box>
       </s-stack>
@@ -232,7 +219,7 @@ const PlanCard = ({
 };
 
 const PlansPage = () => {
-  const { hasActiveSubscription, currentPlan, usageInfo } =
+  const { hasActiveSubscription, currentPlan } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -260,6 +247,7 @@ const PlansPage = () => {
 
   return (
     <s-page heading="Plans">
+      <s-stack direction="block" gap="base">
       {hasActiveSubscription && (
         <s-banner tone="success">
           You are currently subscribed to the <strong>{currentPlan}</strong>.
@@ -273,33 +261,6 @@ const PlansPage = () => {
       {actionData?.error && (
         <s-banner tone="critical">{actionData.error}</s-banner>
       )}
-
-      {!hasActiveSubscription && (
-        <s-section>
-          <s-stack direction="block" gap="small">
-            <s-heading>Current Usage</s-heading>
-            <s-text>
-              You&apos;ve edited {usageInfo.usedCount} of {usageInfo.limit}{" "}
-              draft orders this month on the free plan.
-            </s-text>
-            {usageInfo.usedCount >= usageInfo.limit && (
-              <s-banner tone="warning">
-                You&apos;ve reached your free plan limit. Upgrade to continue
-                editing draft orders.
-              </s-banner>
-            )}
-          </s-stack>
-        </s-section>
-      )}
-
-      <s-section>
-        <s-stack direction="block" gap="base">
-          <s-heading>Choose your plan</s-heading>
-          <s-text color="subdued">
-            Start with a 7-day free trial. Save 17% with annual billing.
-          </s-text>
-        </s-stack>
-      </s-section>
 
       <s-grid gridTemplateColumns="1fr 1fr" gap="base">
         <PlanCard
@@ -338,16 +299,43 @@ const PlansPage = () => {
             <s-box>
               <s-button
                 tone="critical"
-                onClick={handleCancel}
-                loading={isCancelling || undefined}
+                commandFor="cancel-modal"
                 disabled={isSubmitting || undefined}
               >
                 Cancel Subscription
               </s-button>
             </s-box>
           </s-stack>
+
+          <s-modal
+            id="cancel-modal"
+            heading="Cancel subscription?"
+          >
+            <s-text>
+              Are you sure you want to cancel your subscription? You will lose
+              access to unlimited edits and all paid features at the end of your
+              current billing period.
+            </s-text>
+            <s-button
+              slot="primary-action"
+              variant="primary"
+              tone="critical"
+              onClick={handleCancel}
+              loading={isCancelling || undefined}
+            >
+              Yes, cancel subscription
+            </s-button>
+            <s-button
+              slot="secondary-action"
+              commandFor="cancel-modal"
+              command="--hide"
+            >
+              Keep subscription
+            </s-button>
+          </s-modal>
         </s-section>
       )}
+      </s-stack>
     </s-page>
   );
 };
