@@ -106,8 +106,9 @@ const DraftOrderDetailPage = () => {
       setSavedLineItemIds(lineItems.map((item) => item.id));
       setHasNewItems(false);
       isSavingRef.current = false;
+      shopify.toast.show("Draft order updated");
     }
-  }, [fetcher.state, fetcher.data, lineItems]);
+  }, [fetcher.state, fetcher.data, lineItems, shopify]);
 
   const handleDragStart = useCallback((index: number) => {
     setDraggedIndex(index);
