@@ -1,0 +1,9 @@
+[[extensions]]
+name = "t:name"
+handle = "edit-draft-order"
+uid = "a4d684d9-f2a3-5b72-0729-ca6fd3aaf65d84b09927"
+type = "admin_link"
+
+[[extensions.targeting]]
+target = "admin.draft-order-details.action.link"
+url = "/app/edit"
