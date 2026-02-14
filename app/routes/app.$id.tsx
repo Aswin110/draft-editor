@@ -1,28 +1,11 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import { useState, useCallback, useRef, useEffect } from "react";
-import {
-  Page,
-  Card,
-  Text,
-  Badge,
-  BlockStack,
-  InlineStack,
-  Box,
-  Divider,
-  Layout,
-  Banner,
-  Button,
-  FooterHelp,
-} from "@shopify/polaris";
-import { PlusIcon, ExternalIcon } from "@shopify/polaris-icons";
 import { SaveBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { getDraftOrder, updateDraftOrderLineItems } from "../models/draft-order.server";
 import { canEditDraftOrder } from "../models/usage.server";
 import {
-  formatDateTime,
-  getStatusBadge,
   formatAddressLines,
   buildShopifyGid,
   extractNumericId,
@@ -331,24 +314,35 @@ const DraftOrderDetailPage = () => {
     window.open(`shopify://admin/draft_orders/${numericId}`, "_blank");
   }, [draftOrder.id]);
 
-  const statusBadge = getStatusBadge(draftOrder.status);
   const isSaving = fetcher.state === "submitting";
 
   return (
-    <Page
-      backAction={{ content: "Draft Orders", onAction: () => navigate("/app") }}
-      title={draftOrder.name}
-      titleMetadata={<Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>}
-      subtitle={`Created on ${formatDateTime(draftOrder.createdAt)}`}
-      secondaryActions={[
-        {
-          content: "Open in Shopify",
-          icon: ExternalIcon,
-          onAction: handleOpenInShopify,
-          accessibilityLabel: "Open draft order in Shopify Admin",
-        },
-      ]}
-    >
+    <s-page heading={draftOrder.name}>
+      <div slot="aside">
+        {draftOrder.note && <NotesCard note={draftOrder.note} />}
+        <CustomerCard customer={draftOrder.customer} />
+        <AddressCard
+          title="Shipping address"
+          addressLines={formatAddressLines(draftOrder.shippingAddress)}
+        />
+        <AddressCard
+          title="Billing address"
+          addressLines={formatAddressLines(draftOrder.billingAddress)}
+        />
+      </div>
+      <s-link slot="breadcrumb-actions" onClick={() => navigate("/app")}>
+        Draft Orders
+      </s-link>
+      <s-button
+        slot="secondary-actions"
+        variant="secondary"
+        onClick={handleOpenInShopify}
+        accessibilityLabel="Open draft order in Shopify Admin"
+        icon="external"
+      >
+        Open in Shopify
+      </s-button>
+
       {!editingDisabled && (
         <SaveBar id="product-order-save-bar" open={hasChanges}>
           <button
@@ -364,143 +358,104 @@ const DraftOrderDetailPage = () => {
           </button>
         </SaveBar>
       )}
-      <Layout>
-        <Layout.Section>
-          {editingDisabled && (
-            <Box paddingBlockEnd="400">
-              <UpgradeBanner usedCount={usedCount} limit={limit} />
-            </Box>
-          )}
 
-          {!hasActivePlan && !editingDisabled && (
-            <Box paddingBlockEnd="400">
-              <Banner tone="info">
-                <p>
-                  Free plan: {usedCount} of {limit} draft order edits used
-                  this month.
-                </p>
-              </Banner>
-            </Box>
-          )}
+      {editingDisabled && (
+        <UpgradeBanner usedCount={usedCount} limit={limit} />
+      )}
 
-          <Card>
-            <BlockStack gap="400">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text as="h2" variant="headingMd">
-                  Products
-                </Text>
-                {!editingDisabled && (
-                  <InlineStack gap="200">
-                    {lineItems.length > 1 && (
-                      <Text as="span" variant="bodySm" tone="subdued">
-                        Drag to reorder
-                      </Text>
-                    )}
-                    <Button
-                      icon={PlusIcon}
-                      onClick={handleAddProducts}
-                      accessibilityLabel="Add products"
-                    >
-                      Add Products
-                    </Button>
-                  </InlineStack>
+      {!hasActivePlan && !editingDisabled && (
+        <s-banner tone="info">
+          Free plan: {usedCount} of {limit} draft order edits used this month.
+        </s-banner>
+      )}
+
+      <s-section>
+        <s-stack direction="block" gap="base">
+          <s-stack
+            direction="inline"
+            justifyContent="space-between"
+            alignItems="center"
+          >
+            <s-heading>Products</s-heading>
+            {!editingDisabled && (
+              <s-stack direction="inline" gap="small" alignItems="center">
+                {lineItems.length > 1 && (
+                  <s-text color="subdued">Drag to reorder</s-text>
                 )}
-              </InlineStack>
-              {fetcher.data?.error && (
-                <Banner tone="critical">{fetcher.data.error}</Banner>
-              )}
-              {lineItems.length > 0 ? (
-                <BlockStack gap="400">
-                  {lineItems.map((item, index) => (
-                    <Box
-                      key={item.id}
-                      borderColor={
-                        dragOverIndex === index ? "border-brand" : "transparent"
-                      }
-                      borderWidth={dragOverIndex === index ? "025" : "0"}
-                      borderRadius="200"
-                    >
-                      {index > 0 && <Divider />}
-                      <Box
-                        paddingBlockStart={index > 0 ? "400" : "0"}
-                        paddingBlockEnd="100"
-                      >
-                        <LineItemRow
-                          item={item}
-                          currencyCode={draftOrder.currencyCode}
-                          isDragging={draggedIndex === index}
-                          onDragStart={() => handleDragStart(index)}
-                          onDragOver={(e) => handleDragOver(e, index)}
-                          onDragLeave={handleDragLeave}
-                          onDrop={(e) => handleDrop(e, index)}
-                          onDragEnd={handleDragEnd}
-                          onRemove={() => handleRemoveItem(item.id)}
-                          onQuantityChange={(qty) =>
-                            handleQuantityChange(item.id, qty)
-                          }
-                          onPriceChange={(price) =>
-                            handlePriceChange(item.id, price)
-                          }
-                          disabled={editingDisabled}
-                        />
-                      </Box>
-                    </Box>
-                  ))}
-                </BlockStack>
-              ) : (
-                <Box paddingBlock="400">
-                  <BlockStack gap="200" align="center">
-                    <Text as="p" tone="subdued">
-                      No products yet
-                    </Text>
-                    {!editingDisabled && (
-                      <Button onClick={handleAddProducts} icon={PlusIcon}>
-                        Add products
-                      </Button>
-                    )}
-                  </BlockStack>
-                </Box>
-              )}
-            </BlockStack>
-          </Card>
-
-          <Box paddingBlockStart="400">
-            <PaymentSummary
-              subtotalPrice={draftOrder.subtotalPrice}
-              totalShippingPrice={draftOrder.totalShippingPrice}
-              totalTax={draftOrder.totalTax}
-              totalPrice={draftOrder.totalPrice}
-              currencyCode={draftOrder.currencyCode}
-            />
-          </Box>
-        </Layout.Section>
-
-        <Layout.Section variant="oneThird">
-          {draftOrder.note && (
-            <Box paddingBlockEnd="400">
-              <NotesCard note={draftOrder.note} />
-            </Box>
+                <s-button
+                  icon="plus"
+                  onClick={handleAddProducts}
+                  accessibilityLabel="Add products"
+                >
+                  Add Products
+                </s-button>
+              </s-stack>
+            )}
+          </s-stack>
+          {fetcher.data?.error && (
+            <s-banner tone="critical">{fetcher.data.error}</s-banner>
           )}
+          {lineItems.length > 0 ? (
+            <s-stack direction="block" gap="base">
+              {lineItems.map((item, index) => (
+                <s-box
+                  key={item.id}
+                  border={dragOverIndex === index ? "base" : undefined}
+                  borderRadius="base"
+                >
+                  {index > 0 && <s-divider></s-divider>}
+                  <s-box
+                    paddingBlockStart={index > 0 ? "base" : undefined}
+                    paddingBlockEnd="small-300"
+                  >
+                    <LineItemRow
+                      item={item}
+                      currencyCode={draftOrder.currencyCode}
+                      isDragging={draggedIndex === index}
+                      onDragStart={() => handleDragStart(index)}
+                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, index)}
+                      onDragEnd={handleDragEnd}
+                      onRemove={() => handleRemoveItem(item.id)}
+                      onQuantityChange={(qty) =>
+                        handleQuantityChange(item.id, qty)
+                      }
+                      onPriceChange={(price) =>
+                        handlePriceChange(item.id, price)
+                      }
+                      disabled={editingDisabled}
+                    />
+                  </s-box>
+                </s-box>
+              ))}
+            </s-stack>
+          ) : (
+            <s-box padding="base">
+              <s-stack alignItems="center" gap="small">
+                <s-text color="subdued">No products yet</s-text>
+                {!editingDisabled && (
+                  <s-button
+                    onClick={handleAddProducts}
+                    icon="plus"
+                  >
+                    Add products
+                  </s-button>
+                )}
+              </s-stack>
+            </s-box>
+          )}
+        </s-stack>
+      </s-section>
 
-          <CustomerCard customer={draftOrder.customer} />
-
-          <Box paddingBlockStart="400">
-            <AddressCard
-              title="Shipping address"
-              addressLines={formatAddressLines(draftOrder.shippingAddress)}
-            />
-          </Box>
-
-          <Box paddingBlockStart="400">
-            <AddressCard
-              title="Billing address"
-              addressLines={formatAddressLines(draftOrder.billingAddress)}
-            />
-          </Box>
-        </Layout.Section>
-      </Layout>
-      <FooterHelp />
-    </Page>
+      <PaymentSummary
+        subtotalPrice={draftOrder.subtotalPrice}
+        totalShippingPrice={draftOrder.totalShippingPrice}
+        totalTax={draftOrder.totalTax}
+        totalPrice={draftOrder.totalPrice}
+        currencyCode={draftOrder.currencyCode}
+      />
+    </s-page>
   );
 };
 export default DraftOrderDetailPage;

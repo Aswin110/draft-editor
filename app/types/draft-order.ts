@@ -59,6 +59,6 @@ export interface PageInfo {
 export type DraftOrderStatus = "OPEN" | "INVOICE_SENT" | "COMPLETED";
 
 export interface StatusBadgeConfig {
-  tone: "info" | "attention" | "success";
+  tone: "info" | "caution" | "success";
   label: string;
 }

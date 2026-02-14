@@ -1,21 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useActionData, useNavigation, useSubmit } from "react-router";
 import { useEffect } from "react";
-import {
-  Page,
-  Card,
-  Text,
-  BlockStack,
-  InlineStack,
-  Box,
-  Button,
-  Divider,
-  Icon,
-  InlineGrid,
-  Badge,
-  Banner,
-} from "@shopify/polaris";
-import { CheckIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import { MONTHLY_PLAN, ANNUAL_PLAN, FREE_TIER_EDIT_LIMIT } from "../constants/plans";
 import { getMonthlyUsageStatus } from "../models/usage.server";
@@ -154,6 +139,73 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   };
 };
 
+const PlanCard = ({
+  title,
+  price,
+  priceLabel,
+  description,
+  badgeLabel,
+  currentPlan,
+  planName,
+  isSubmitting,
+  submittingPlan,
+  onSubscribe,
+}: {
+  title: string;
+  price: string;
+  priceLabel: string;
+  description: string;
+  badgeLabel?: string;
+  currentPlan: string | null;
+  planName: string;
+  isSubmitting: boolean;
+  submittingPlan: FormDataEntryValue | null;
+  onSubscribe: () => void;
+}) => {
+  const isCurrentPlan = currentPlan === planName;
+
+  return (
+    <s-section>
+      <s-stack direction="block" gap="base">
+        <s-stack direction="block" gap="small">
+          <s-stack direction="inline" gap="small" alignItems="center">
+            <s-heading>{title}</s-heading>
+            {badgeLabel && <s-badge tone="success">{badgeLabel}</s-badge>}
+            {isCurrentPlan && <s-badge tone="info">Current Plan</s-badge>}
+          </s-stack>
+          <s-stack direction="inline" gap="small-300" alignItems="end">
+            <s-heading>{price}</s-heading>
+            <s-text color="subdued">{priceLabel}</s-text>
+          </s-stack>
+          <s-text color="subdued">{description}</s-text>
+        </s-stack>
+
+        <s-divider></s-divider>
+
+        <s-stack direction="block" gap="small">
+          {features.map((feature, index) => (
+            <s-stack key={index} direction="inline" gap="small" alignItems="center">
+              <s-icon type="check" tone="success"></s-icon>
+              <s-text>{feature}</s-text>
+            </s-stack>
+          ))}
+        </s-stack>
+
+        <s-box paddingBlockStart="small">
+          <s-button
+            variant="primary"
+            onClick={onSubscribe}
+            loading={submittingPlan === (planName === MONTHLY_PLAN ? "monthly" : "annual") || undefined}
+            disabled={isCurrentPlan || isSubmitting || undefined}
+          >
+            {isCurrentPlan ? "Current Plan" : "Start Free Trial"}
+          </s-button>
+        </s-box>
+      </s-stack>
+    </s-section>
+  );
+};
+
 const PlansPage = () => {
   const { hasActiveSubscription, currentPlan, usageInfo } =
     useLoaderData<typeof loader>();
@@ -184,203 +236,96 @@ const PlansPage = () => {
     isSubmitting && navigation.formData?.get("intent") === "cancel";
 
   return (
-    <Page title="Plans">
-      <BlockStack gap="400">
-        {hasActiveSubscription && (
-          <Banner tone="success">
-            <p>
-              You are currently subscribed to the{" "}
-              <strong>{currentPlan}</strong>.
-            </p>
-          </Banner>
-        )}
+    <s-page heading="Plans">
+      {hasActiveSubscription && (
+        <s-banner tone="success">
+          You are currently subscribed to the <strong>{currentPlan}</strong>.
+        </s-banner>
+      )}
 
-        {actionData?.cancelled && (
-          <Banner tone="info">
-            <p>Your subscription has been cancelled.</p>
-          </Banner>
-        )}
+      {actionData?.cancelled && (
+        <s-banner tone="info">Your subscription has been cancelled.</s-banner>
+      )}
 
-        {actionData?.error && (
-          <Banner tone="critical">
-            <p>{actionData.error}</p>
-          </Banner>
-        )}
+      {actionData?.error && (
+        <s-banner tone="critical">{actionData.error}</s-banner>
+      )}
 
-        {!hasActiveSubscription && (
-          <Card>
-            <BlockStack gap="200">
-              <Text as="h3" variant="headingMd">
-                Current Usage
-              </Text>
-              <Text as="p">
-                You&apos;ve edited <strong>{usageInfo.usedCount}</strong> of{" "}
-                <strong>{usageInfo.limit}</strong> draft orders this month on
-                the free plan.
-              </Text>
-              {usageInfo.usedCount >= usageInfo.limit && (
-                <Banner tone="warning">
-                  <p>
-                    You&apos;ve reached your free plan limit. Upgrade to continue
-                    editing draft orders.
-                  </p>
-                </Banner>
-              )}
-            </BlockStack>
-          </Card>
-        )}
+      {!hasActiveSubscription && (
+        <s-section>
+          <s-stack direction="block" gap="small">
+            <s-heading>Current Usage</s-heading>
+            <s-text>
+              You&apos;ve edited {usageInfo.usedCount} of {usageInfo.limit} draft
+              orders this month on the free plan.
+            </s-text>
+            {usageInfo.usedCount >= usageInfo.limit && (
+              <s-banner tone="warning">
+                You&apos;ve reached your free plan limit. Upgrade to continue
+                editing draft orders.
+              </s-banner>
+            )}
+          </s-stack>
+        </s-section>
+      )}
 
-        <Card>
-          <BlockStack gap="400">
-            <Text as="h2" variant="headingLg">
-              Choose your plan
-            </Text>
-            <Text as="p" tone="subdued">
-              Start with a 7-day free trial. Save 17% with annual billing.
-            </Text>
-          </BlockStack>
-        </Card>
+      <s-section>
+        <s-stack direction="block" gap="base">
+          <s-heading>Choose your plan</s-heading>
+          <s-text color="subdued">
+            Start with a 7-day free trial. Save 17% with annual billing.
+          </s-text>
+        </s-stack>
+      </s-section>
 
-        <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
-          <Card>
-            <BlockStack gap="400">
-              <BlockStack gap="200">
-                <InlineStack gap="200" blockAlign="center">
-                  <Text as="h3" variant="headingMd">
-                    Monthly
-                  </Text>
-                  {currentPlan === MONTHLY_PLAN && (
-                    <Badge tone="info">Current Plan</Badge>
-                  )}
-                </InlineStack>
-                <InlineStack gap="100" blockAlign="baseline">
-                  <Text as="span" variant="heading2xl" fontWeight="bold">
-                    $3
-                  </Text>
-                  <Text as="span" variant="bodyMd" tone="subdued">
-                    / month
-                  </Text>
-                </InlineStack>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  7-day free trial, then billed monthly.
-                </Text>
-              </BlockStack>
+      <s-grid gridTemplateColumns="1fr 1fr" gap="base">
+        <PlanCard
+          title="Monthly"
+          price="$3"
+          priceLabel="/ month"
+          description="7-day free trial, then billed monthly."
+          currentPlan={currentPlan}
+          planName={MONTHLY_PLAN}
+          isSubmitting={isSubmitting}
+          submittingPlan={submittingPlan ?? null}
+          onSubscribe={() => handleSubscribe("monthly")}
+        />
+        <PlanCard
+          title="Annual"
+          price="$30"
+          priceLabel="/ year"
+          description="7-day free trial, then $2.50/month billed annually."
+          badgeLabel="Save 17%"
+          currentPlan={currentPlan}
+          planName={ANNUAL_PLAN}
+          isSubmitting={isSubmitting}
+          submittingPlan={submittingPlan ?? null}
+          onSubscribe={() => handleSubscribe("annual")}
+        />
+      </s-grid>
 
-              <Divider />
-
-              <BlockStack gap="300">
-                {features.map((feature, index) => (
-                  <InlineStack key={index} gap="200" blockAlign="center">
-                    <Box>
-                      <Icon source={CheckIcon} tone="success" />
-                    </Box>
-                    <Text as="span" variant="bodyMd">
-                      {feature}
-                    </Text>
-                  </InlineStack>
-                ))}
-              </BlockStack>
-
-              <Box paddingBlockStart="200">
-                <Button
-                  variant="primary"
-                  size="large"
-                  fullWidth
-                  onClick={() => handleSubscribe("monthly")}
-                  loading={submittingPlan === "monthly"}
-                  disabled={currentPlan === MONTHLY_PLAN || isSubmitting}
-                >
-                  {currentPlan === MONTHLY_PLAN
-                    ? "Current Plan"
-                    : "Start Free Trial"}
-                </Button>
-              </Box>
-            </BlockStack>
-          </Card>
-
-          <Card>
-            <BlockStack gap="400">
-              <BlockStack gap="200">
-                <InlineStack gap="200" blockAlign="center">
-                  <Text as="h3" variant="headingMd">
-                    Annual
-                  </Text>
-                  <Badge tone="success">Save 17%</Badge>
-                  {currentPlan === ANNUAL_PLAN && (
-                    <Badge tone="info">Current Plan</Badge>
-                  )}
-                </InlineStack>
-                <InlineStack gap="100" blockAlign="baseline">
-                  <Text as="span" variant="heading2xl" fontWeight="bold">
-                    $30
-                  </Text>
-                  <Text as="span" variant="bodyMd" tone="subdued">
-                    / year
-                  </Text>
-                </InlineStack>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  7-day free trial, then $2.50/month billed annually.
-                </Text>
-              </BlockStack>
-
-              <Divider />
-
-              <BlockStack gap="300">
-                {features.map((feature, index) => (
-                  <InlineStack key={index} gap="200" blockAlign="center">
-                    <Box>
-                      <Icon source={CheckIcon} tone="success" />
-                    </Box>
-                    <Text as="span" variant="bodyMd">
-                      {feature}
-                    </Text>
-                  </InlineStack>
-                ))}
-              </BlockStack>
-
-              <Box paddingBlockStart="200">
-                <Button
-                  variant="primary"
-                  size="large"
-                  fullWidth
-                  onClick={() => handleSubscribe("annual")}
-                  loading={submittingPlan === "annual"}
-                  disabled={currentPlan === ANNUAL_PLAN || isSubmitting}
-                >
-                  {currentPlan === ANNUAL_PLAN
-                    ? "Current Plan"
-                    : "Start Free Trial"}
-                </Button>
-              </Box>
-            </BlockStack>
-          </Card>
-        </InlineGrid>
-
-        {hasActiveSubscription && (
-          <Card>
-            <BlockStack gap="300">
-              <Text as="h3" variant="headingMd">
-                Cancel subscription
-              </Text>
-              <Text as="p" tone="subdued">
-                If you cancel, you will lose access to all paid features at the
-                end of your current billing period.
-              </Text>
-              <Box>
-                <Button
-                  tone="critical"
-                  onClick={handleCancel}
-                  loading={isCancelling}
-                  disabled={isSubmitting}
-                >
-                  Cancel Subscription
-                </Button>
-              </Box>
-            </BlockStack>
-          </Card>
-        )}
-      </BlockStack>
-    </Page>
+      {hasActiveSubscription && (
+        <s-section>
+          <s-stack direction="block" gap="small">
+            <s-heading>Cancel subscription</s-heading>
+            <s-text color="subdued">
+              If you cancel, you will lose access to all paid features at the
+              end of your current billing period.
+            </s-text>
+            <s-box>
+              <s-button
+                tone="critical"
+                onClick={handleCancel}
+                loading={isCancelling || undefined}
+                disabled={isSubmitting || undefined}
+              >
+                Cancel Subscription
+              </s-button>
+            </s-box>
+          </s-stack>
+        </s-section>
+      )}
+    </s-page>
   );
 };
 export default PlansPage;

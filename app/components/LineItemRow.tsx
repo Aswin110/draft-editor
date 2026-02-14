@@ -1,14 +1,3 @@
-import {
-  InlineStack,
-  BlockStack,
-  Text,
-  Thumbnail,
-  Icon,
-  Box,
-  Button,
-  TextField,
-} from "@shopify/polaris";
-import { ImageIcon, DragHandleIcon, DeleteIcon } from "@shopify/polaris-icons";
 import type { LineItem } from "../types/draft-order";
 
 export interface LineItemRowProps {
@@ -44,6 +33,24 @@ export const LineItemRow = ({
     parseFloat(item.originalUnitPrice || "0") * item.quantity
   ).toFixed(2);
 
+  const handlePriceChange = (e: Event) => {
+    const value = (e.currentTarget as HTMLInputElement).value;
+    onPriceChange(value);
+  };
+
+  const handlePriceBlur = () => {
+    const formatted = parseFloat(item.originalUnitPrice || "0").toFixed(2);
+    onPriceChange(formatted);
+  };
+
+  const handleQuantityChange = (e: Event) => {
+    const value = (e.currentTarget as HTMLInputElement).value;
+    const qty = parseInt(value, 10);
+    if (!isNaN(qty) && qty >= 1) {
+      onQuantityChange(qty);
+    }
+  };
+
   return (
     <div
       draggable={!disabled}
@@ -58,93 +65,89 @@ export const LineItemRow = ({
         transition: "opacity 0.2s",
       }}
     >
-      <InlineStack gap="200" blockAlign="start">
-        <Box>
-          <Icon source={DragHandleIcon} tone="subdued" />
-        </Box>
-        <Box>
-          <Thumbnail
-            source={item.image || ImageIcon}
-            alt={item.title}
-            size="medium"
-          />
-        </Box>
-        <Box minWidth="120px">
-          <BlockStack gap="100">
-            <Text as="span" variant="bodyMd" fontWeight="semibold">
-              {item.title}
-            </Text>
+      <s-stack direction="inline" gap="base" alignItems="start">
+        <s-box>
+          <s-icon type="drag-handle" tone="neutral"></s-icon>
+        </s-box>
+        <s-box>
+          {item.image ? (
+            <s-box
+              maxInlineSize="40px"
+              maxBlockSize="40px"
+              border="base"
+              borderRadius="base"
+              overflow="hidden"
+            >
+              <s-image src={item.image} alt={item.title} aspectRatio="1/1" />
+            </s-box>
+          ) : (
+            <s-box
+              maxInlineSize="40px"
+              maxBlockSize="40px"
+              border="base"
+              borderRadius="base"
+              overflow="hidden"
+              padding="small"
+            >
+              <s-icon type="image" tone="neutral"></s-icon>
+            </s-box>
+          )}
+        </s-box>
+        <s-box minInlineSize="120px">
+          <s-stack direction="block" gap="small-300">
+            <s-text type="strong">{item.title}</s-text>
             {item.variantTitle && (
-              <Text as="span" variant="bodySm" tone="subdued">
-                {item.variantTitle}
-              </Text>
+              <s-text color="subdued">{item.variantTitle}</s-text>
             )}
-            {item.sku && (
-              <Text as="span" variant="bodySm" tone="subdued">
-                SKU: {item.sku}
-              </Text>
-            )}
-          </BlockStack>
-        </Box>
-        <Box minWidth="0" width="100%">
-          <InlineStack align="end" blockAlign="center" gap="300">
-            <Box width="180px">
-              <TextField
+            {item.sku && <s-text color="subdued">SKU: {item.sku}</s-text>}
+          </s-stack>
+        </s-box>
+        <s-box minInlineSize="0" inlineSize="100%">
+          <s-stack
+            direction="inline"
+            justifyContent="end"
+            alignItems="center"
+            gap="base"
+          >
+            <s-box inlineSize="180px">
+              <s-number-field
                 label="Price"
-                labelHidden
-                type="number"
+                labelAccessibilityVisibility="exclusive"
                 value={item.originalUnitPrice}
-                onChange={(value) => onPriceChange(value)}
-                onBlur={() => {
-                  const formatted = parseFloat(
-                    item.originalUnitPrice || "0",
-                  ).toFixed(2);
-                  onPriceChange(formatted);
-                }}
+                onInput={handlePriceChange}
+                onBlur={handlePriceBlur}
                 min={0}
                 step={0.01}
-                autoComplete="off"
-                disabled={disabled}
-              />
-            </Box>
-            <Text as="span" tone="subdued">
-              ×
-            </Text>
-            <Box width="80px">
-              <TextField
+                disabled={disabled || undefined}
+              ></s-number-field>
+            </s-box>
+            <s-text color="subdued">×</s-text>
+            <s-box inlineSize="80px">
+              <s-number-field
                 label="Quantity"
-                labelHidden
-                type="number"
+                labelAccessibilityVisibility="exclusive"
                 value={item.quantity.toString()}
-                onChange={(value) => {
-                  const qty = parseInt(value, 10);
-                  if (!isNaN(qty) && qty >= 1) {
-                    onQuantityChange(qty);
-                  }
-                }}
+                onInput={handleQuantityChange}
                 min={1}
-                autoComplete="off"
-                disabled={disabled}
-              />
-            </Box>
-            <Text as="span" tone="subdued">
-              =
-            </Text>
-            <Text as="span" variant="bodyMd" fontWeight="semibold">
+                disabled={disabled || undefined}
+              ></s-number-field>
+            </s-box>
+            <s-text color="subdued">=</s-text>
+            <s-text type="strong">
               {currencyCode} {totalAmount}
-            </Text>
+            </s-text>
             {!disabled && (
-              <Button
-                icon={DeleteIcon}
-                variant="plain"
+              <s-button
+                icon="x"
+                variant="tertiary"
                 tone="critical"
                 onClick={onRemove}
                 accessibilityLabel={`Remove ${item.title}`}
-              />
+              ></s-button>
             )}
-          </InlineStack>
-        </Box>
-      </InlineStack>
+          </s-stack>
+        </s-box>
+      </s-stack>
     </div>
   );
 };

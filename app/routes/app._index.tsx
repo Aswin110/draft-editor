@@ -1,18 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useSearchParams, useNavigate } from "react-router";
-import {
-  Page,
-  IndexTable,
-  Text,
-  Badge,
-  EmptySearchResult,
-  Card,
-  TextField,
-  Icon,
-  Box,
-} from "@shopify/polaris";
-import { SearchIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import { getDraftOrders } from "../models/draft-order.server";
 import {
@@ -40,7 +28,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const cursor = url.searchParams.get("cursor") || null;
   const direction = url.searchParams.get("direction") || "next";
 
-  // Pass search query directly to Shopify API
   const formattedQuery = searchQuery || undefined;
 
   const options =
@@ -69,10 +56,10 @@ const DraftOrdersIndex = () => {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleQueryChange = useCallback(
-    (value: string) => {
+    (e: Event) => {
+      const value = (e.currentTarget as HTMLInputElement).value;
       setQueryValue(value);
 
-      // Debounce the search
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
       }
@@ -88,14 +75,6 @@ const DraftOrdersIndex = () => {
     },
     [setSearchParams],
   );
-
-  const handleQueryClear = useCallback(() => {
-    setQueryValue("");
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-    setSearchParams(new URLSearchParams());
-  }, [setSearchParams]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -134,97 +113,100 @@ const DraftOrdersIndex = () => {
     navigate(`/app/${extractNumericId(draftOrderId)}`);
   };
 
-  const rowMarkup = draftOrders.map((draftOrder, index) => {
-    const statusBadge = getStatusBadge(draftOrder.status);
+  if (draftOrders.length === 0) {
     return (
-      <IndexTable.Row
-        id={draftOrder.id}
-        key={draftOrder.id}
-        position={index}
-        onClick={() => handleRowClick(draftOrder.id)}
-      >
-        <IndexTable.Cell>
-          <Text variant="bodyMd" fontWeight="bold" as="span">
-            {draftOrder.name}
-          </Text>
-        </IndexTable.Cell>
-        <IndexTable.Cell>
-          <Text as="span" variant="bodyMd">
-            {draftOrder.customer?.displayName || "No customer"}
-          </Text>
-        </IndexTable.Cell>
-        <IndexTable.Cell>
-          <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
-        </IndexTable.Cell>
-        <IndexTable.Cell>
-          <Text as="span" variant="bodyMd" numeric>
-            {formatCurrency(draftOrder.totalPrice, draftOrder.currencyCode)}
-          </Text>
-        </IndexTable.Cell>
-        <IndexTable.Cell>
-          <Text as="span" variant="bodyMd">
-            {formatDate(draftOrder.createdAt)}
-          </Text>
-        </IndexTable.Cell>
-      </IndexTable.Row>
+      <s-page heading="Draft Orders">
+        <s-section padding="none">
+          <s-box padding="large-300">
+            <s-stack alignItems="center" gap="base">
+              <s-heading>
+                {searchQuery
+                  ? "No draft orders found matching your search"
+                  : "No draft orders yet"}
+              </s-heading>
+              <s-paragraph>
+                {searchQuery
+                  ? "Try changing your search terms"
+                  : "Draft orders will appear here once created"}
+              </s-paragraph>
+            </s-stack>
+          </s-box>
+        </s-section>
+      </s-page>
     );
-  });
-
-  const emptyStateMarkup = (
-    <EmptySearchResult
-      title={
-        searchQuery
-          ? "No draft orders found matching your search"
-          : "No draft orders yet"
-      }
-      description={
-        searchQuery
-          ? "Try changing your search terms"
-          : "Draft orders will appear here once created"
-      }
-      withIllustration
-    />
-  );
+  }
 
   return (
-    <Page title="Draft Orders" fullWidth>
-      <Card padding="0">
-        <Box padding="400">
-          <TextField
-            label=""
-            labelHidden
-            value={queryValue}
-            onChange={handleQueryChange}
-            placeholder="Search draft orders..."
-            clearButton
-            onClearButtonClick={handleQueryClear}
-            prefix={<Icon source={SearchIcon} />}
-            autoComplete="off"
-          />
-        </Box>
-        <IndexTable
-          resourceName={{ singular: "draft order", plural: "draft orders" }}
-          itemCount={draftOrders.length}
-          selectable={false}
-          headings={[
-            { title: "Draft Order" },
-            { title: "Customer" },
-            { title: "Status" },
-            { title: "Total" },
-            { title: "Created" },
-          ]}
-          emptyState={emptyStateMarkup}
-          pagination={{
-            hasNext: pageInfo.hasNextPage,
-            hasPrevious: pageInfo.hasPreviousPage,
-            onNext: handleNextPage,
-            onPrevious: handlePreviousPage,
-          }}
+    <s-page heading="Draft Orders">
+      <s-section padding="none" accessibilityLabel="Draft orders table section">
+        <s-table
+          paginate
+          hasNextPage={pageInfo.hasNextPage}
+          hasPreviousPage={pageInfo.hasPreviousPage}
+          onNextPage={handleNextPage}
+          onPreviousPage={handlePreviousPage}
         >
-          {rowMarkup}
-        </IndexTable>
-      </Card>
-    </Page>
+          <s-text-field
+            slot="filters"
+            label="Search draft orders"
+            labelAccessibilityVisibility="exclusive"
+            icon="search"
+            placeholder="Search draft orders..."
+            value={queryValue}
+            onInput={handleQueryChange}
+          ></s-text-field>
+          <s-table-header-row>
+            <s-table-header listSlot="primary">Draft Order</s-table-header>
+            <s-table-header listSlot="secondary">Customer</s-table-header>
+            <s-table-header>Status</s-table-header>
+            <s-table-header format="currency">Total</s-table-header>
+            <s-table-header>Created</s-table-header>
+          </s-table-header-row>
+          <s-table-body>
+            {draftOrders.map((draftOrder) => {
+              const statusBadge = getStatusBadge(draftOrder.status);
+              const clickableId = `row-${extractNumericId(draftOrder.id)}`;
+              return (
+                <s-table-row
+                  key={draftOrder.id}
+                  clickDelegate={clickableId}
+                >
+                  <s-table-cell>
+                    <s-clickable
+                      id={clickableId}
+                      onClick={() => handleRowClick(draftOrder.id)}
+                    >
+                      <s-text type="strong">{draftOrder.name}</s-text>
+                    </s-clickable>
+                  </s-table-cell>
+                  <s-table-cell>
+                    <s-text>
+                      {draftOrder.customer?.displayName || "No customer"}
+                    </s-text>
+                  </s-table-cell>
+                  <s-table-cell>
+                    <s-badge tone={statusBadge.tone}>
+                      {statusBadge.label}
+                    </s-badge>
+                  </s-table-cell>
+                  <s-table-cell>
+                    <s-text>
+                      {formatCurrency(
+                        draftOrder.totalPrice,
+                        draftOrder.currencyCode,
+                      )}
+                    </s-text>
+                  </s-table-cell>
+                  <s-table-cell>
+                    <s-text>{formatDate(draftOrder.createdAt)}</s-text>
+                  </s-table-cell>
+                </s-table-row>
+              );
+            })}
+          </s-table-body>
+        </s-table>
+      </s-section>
+    </s-page>
   );
 };
 export default DraftOrdersIndex;

@@ -28,7 +28,7 @@ export const formatCurrency = (amount: string, currencyCode: string): string => 
 export const getStatusBadge = (status: string): StatusBadgeConfig => {
   const statusMap: Record<string, StatusBadgeConfig> = {
     OPEN: { tone: "info", label: "Open" },
-    INVOICE_SENT: { tone: "attention", label: "Invoice Sent" },
+    INVOICE_SENT: { tone: "caution", label: "Invoice Sent" },
     COMPLETED: { tone: "success", label: "Completed" },
   };
   return statusMap[status] || { tone: "info", label: status };
