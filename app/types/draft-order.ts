@@ -28,6 +28,11 @@ export interface LineItem {
   variantTitle: string | null;
 }
 
+export interface CustomAttribute {
+  key: string;
+  value: string;
+}
+
 export interface DraftOrder {
   id: string;
   name: string;
@@ -47,6 +52,7 @@ export interface DraftOrderDetail extends Omit<DraftOrder, "customer"> {
   shippingAddress: Address | null;
   billingAddress: Address | null;
   lineItems: LineItem[];
+  customAttributes: CustomAttribute[];
 }
 
 export interface PageInfo {

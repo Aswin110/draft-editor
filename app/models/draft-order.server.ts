@@ -6,6 +6,10 @@ import type {
 } from "../types/draft-order";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import type { CurrencyCode } from "../types/admin.types.d.ts";
+import type {
+  GetDraftOrdersQuery,
+  GetDraftOrderQuery,
+} from "../types/admin.generated.d.ts";
 
 const DRAFT_ORDERS_QUERY = `#graphql
   query getDraftOrders($first: Int, $last: Int, $after: String, $before: String, $reverse: Boolean, $query: String) {
@@ -45,6 +49,10 @@ const DRAFT_ORDER_QUERY = `#graphql
       createdAt
       status
       note2
+      customAttributes {
+        key
+        value
+      }
       subtotalPriceSet {
         shopMoney {
           amount
@@ -124,6 +132,10 @@ const UPDATE_DRAFT_ORDER_MUTATION = `#graphql
     draftOrderUpdate(id: $id, input: $input) {
       draftOrder {
         id
+        customAttributes {
+          key
+          value
+        }
         lineItems(first: 50) {
           edges {
             node {
@@ -170,7 +182,7 @@ export const getDraftOrders = async (
     },
   });
 
-  const { data } = await response.json();
+  const { data } = (await response.json()) as { data: GetDraftOrdersQuery };
 
   const draftOrders: DraftOrder[] =
     data?.draftOrders.edges.map((edge) => ({
@@ -201,7 +213,7 @@ export const getDraftOrder = async (
     variables: { id },
   });
 
-  const { data } = await response.json();
+  const { data } = (await response.json()) as { data: GetDraftOrderQuery };
 
   const draftOrder = data?.draftOrder;
   if (!draftOrder) return null;
@@ -263,6 +275,10 @@ export const getDraftOrder = async (
         }
       : null,
     lineItems,
+    customAttributes: (draftOrder.customAttributes || []).map((attr) => ({
+      key: attr.key,
+      value: attr.value ?? "",
+    })),
   };
 };
 
@@ -277,6 +293,7 @@ export const updateDraftOrderLineItems = async (
   admin: AdminApiContext,
   id: string,
   lineItems: UpdateLineItemsInput[],
+  customAttributes?: { key: string; value: string }[],
 ): Promise<{ success: boolean; error?: string }> => {
   const validLineItems = lineItems.filter((item) => item.variantId !== null);
 
@@ -293,12 +310,18 @@ export const updateDraftOrderLineItems = async (
     },
   }));
 
+  const input: Record<string, unknown> = {
+    lineItems: lineItemsInput,
+  };
+
+  if (customAttributes) {
+    input.customAttributes = customAttributes;
+  }
+
   const response = await admin.graphql(UPDATE_DRAFT_ORDER_MUTATION, {
     variables: {
       id,
-      input: {
-        lineItems: lineItemsInput,
-      },
+      input,
     },
   });
 

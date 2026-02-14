@@ -16,10 +16,12 @@ import { AddressCard } from "../components/AddressCard";
 import { CustomerCard } from "../components/CustomerCard";
 import { LineItemRow } from "../components/LineItemRow";
 import { NotesCard } from "../components/NotesCard";
+import { CustomAttributesCard } from "../components/CustomAttributesCard";
 import { PaymentSummary } from "../components/PaymentSummary";
 import type {
   DraftOrderDetail as DraftOrderDetailType,
   LineItem,
+  CustomAttribute,
 } from "../types/draft-order";
 
 interface LoaderData {
@@ -46,6 +48,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const lineItemsJson = formData.get("lineItems") as string;
   const currencyCode = formData.get("currencyCode") as string;
+  const customAttributesJson = formData.get("customAttributes") as string;
 
   if (!lineItemsJson) {
     return { success: false, error: "No line items provided" };
@@ -69,7 +72,19 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     }),
   );
 
-  return updateDraftOrderLineItems(admin, draftOrderGid, lineItems);
+  const customAttributes: { key: string; value: string }[] =
+    customAttributesJson
+      ? JSON.parse(customAttributesJson).filter(
+          (attr: { key: string; value: string }) => attr.key.trim() !== "",
+        )
+      : undefined;
+
+  return updateDraftOrderLineItems(
+    admin,
+    draftOrderGid,
+    lineItems,
+    customAttributes,
+  );
 };
 
 const DraftOrderDetailPage = () => {
@@ -82,6 +97,11 @@ const DraftOrderDetailPage = () => {
   const [savedLineItemIds, setSavedLineItemIds] = useState<string[]>(
     draftOrder.lineItems.map((item) => item.id),
   );
+  const [customAttributes, setCustomAttributes] = useState<CustomAttribute[]>(
+    draftOrder.customAttributes,
+  );
+  const [savedCustomAttributes, setSavedCustomAttributes] =
+    useState<CustomAttribute[]>(draftOrder.customAttributes);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [hasNewItems, setHasNewItems] = useState(false);
@@ -90,9 +110,12 @@ const DraftOrderDetailPage = () => {
   const hasOrderChanges = savedLineItemIds.some(
     (id, index) => id !== currentIds[index],
   );
+  const hasAttributeChanges =
+    JSON.stringify(customAttributes) !== JSON.stringify(savedCustomAttributes);
   const hasChanges =
     hasOrderChanges ||
     hasNewItems ||
+    hasAttributeChanges ||
     lineItems.length !== savedLineItemIds.length;
 
   const isSavingRef = useRef(false);
@@ -104,11 +127,12 @@ const DraftOrderDetailPage = () => {
       fetcher.data?.success
     ) {
       setSavedLineItemIds(lineItems.map((item) => item.id));
+      setSavedCustomAttributes([...customAttributes]);
       setHasNewItems(false);
       isSavingRef.current = false;
       shopify.toast.show("Draft order updated");
     }
-  }, [fetcher.state, fetcher.data, lineItems, shopify]);
+  }, [fetcher.state, fetcher.data, lineItems, customAttributes, shopify]);
 
   const handleDragStart = useCallback((index: number) => {
     setDraggedIndex(index);
@@ -241,14 +265,17 @@ const DraftOrderDetailPage = () => {
       ),
     );
     formData.append("currencyCode", draftOrder.currencyCode);
+    formData.append("customAttributes", JSON.stringify(customAttributes));
     fetcher.submit(formData, { method: "POST" });
-  }, [lineItems, fetcher, draftOrder.currencyCode]);
+  }, [lineItems, customAttributes, fetcher, draftOrder.currencyCode]);
 
   const handleDiscard = useCallback(() => {
     setLineItems(draftOrder.lineItems);
     setSavedLineItemIds(draftOrder.lineItems.map((item) => item.id));
+    setCustomAttributes(draftOrder.customAttributes);
+    setSavedCustomAttributes(draftOrder.customAttributes);
     setHasNewItems(false);
-  }, [draftOrder.lineItems]);
+  }, [draftOrder.lineItems, draftOrder.customAttributes]);
 
   const handleRemoveItem = useCallback((itemId: string) => {
     setLineItems((prev) => prev.filter((item) => item.id !== itemId));
@@ -284,6 +311,10 @@ const DraftOrderDetailPage = () => {
     <s-page heading={draftOrder.name}>
       <div slot="aside">
         {draftOrder.note && <NotesCard note={draftOrder.note} />}
+        <CustomAttributesCard
+          attributes={customAttributes}
+          onChange={setCustomAttributes}
+        />
         <CustomerCard customer={draftOrder.customer} />
         <AddressCard
           title="Shipping address"
