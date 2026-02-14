@@ -1,10 +1,22 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useActionData, useNavigation, useSubmit } from "react-router";
+import {
+  useLoaderData,
+  useActionData,
+  useNavigation,
+  useSubmit,
+} from "react-router";
 import { useEffect } from "react";
 import { authenticate } from "../shopify.server";
-import { MONTHLY_PLAN, ANNUAL_PLAN, FREE_TIER_EDIT_LIMIT } from "../constants/plans";
+import {
+  MONTHLY_PLAN,
+  ANNUAL_PLAN,
+  FREE_TIER_EDIT_LIMIT,
+} from "../constants/plans";
 import { getMonthlyUsageStatus } from "../models/usage.server";
-import type { CurrencyCode, AppPricingInterval } from "../types/admin.types.d.ts";
+import type {
+  CurrencyCode,
+  AppPricingInterval,
+} from "../types/admin.types.d.ts";
 
 const features = ["Unlimited draft order edits", "Priority support"];
 
@@ -116,8 +128,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           {
             plan: {
               appRecurringPricingDetails: {
-                price: { amount: isAnnual ? 30 : 3, currencyCode: "USD" as CurrencyCode },
-                interval: (isAnnual ? "ANNUAL" : "EVERY_30_DAYS") as AppPricingInterval,
+                price: {
+                  amount: isAnnual ? 30 : 3,
+                  currencyCode: "USD" as CurrencyCode,
+                },
+                interval: (isAnnual
+                  ? "ANNUAL"
+                  : "EVERY_30_DAYS") as AppPricingInterval,
               },
             },
           },
@@ -184,7 +201,12 @@ const PlanCard = ({
 
         <s-stack direction="block" gap="small">
           {features.map((feature, index) => (
-            <s-stack key={index} direction="inline" gap="small" alignItems="center">
+            <s-stack
+              key={index}
+              direction="inline"
+              gap="small"
+              alignItems="center"
+            >
               <s-icon type="check" tone="success"></s-icon>
               <s-text>{feature}</s-text>
             </s-stack>
@@ -195,7 +217,10 @@ const PlanCard = ({
           <s-button
             variant="primary"
             onClick={onSubscribe}
-            loading={submittingPlan === (planName === MONTHLY_PLAN ? "monthly" : "annual") || undefined}
+            loading={
+              submittingPlan ===
+                (planName === MONTHLY_PLAN ? "monthly" : "annual") || undefined
+            }
             disabled={isCurrentPlan || isSubmitting || undefined}
           >
             {isCurrentPlan ? "Current Plan" : "Start Free Trial"}
@@ -214,9 +239,7 @@ const PlansPage = () => {
   const submit = useSubmit();
 
   const isSubmitting = navigation.state === "submitting";
-  const submittingPlan = isSubmitting
-    ? navigation.formData?.get("plan")
-    : null;
+  const submittingPlan = isSubmitting ? navigation.formData?.get("plan") : null;
 
   useEffect(() => {
     if (actionData?.confirmationUrl) {
@@ -256,8 +279,8 @@ const PlansPage = () => {
           <s-stack direction="block" gap="small">
             <s-heading>Current Usage</s-heading>
             <s-text>
-              You&apos;ve edited {usageInfo.usedCount} of {usageInfo.limit} draft
-              orders this month on the free plan.
+              You&apos;ve edited {usageInfo.usedCount} of {usageInfo.limit}{" "}
+              draft orders this month on the free plan.
             </s-text>
             {usageInfo.usedCount >= usageInfo.limit && (
               <s-banner tone="warning">

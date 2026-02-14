@@ -1,4 +1,9 @@
-import type { DraftOrder, DraftOrderDetail, LineItem, PageInfo } from "../types/draft-order";
+import type {
+  DraftOrder,
+  DraftOrderDetail,
+  LineItem,
+  PageInfo,
+} from "../types/draft-order";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import type { CurrencyCode } from "../types/admin.types.d.ts";
 
@@ -152,7 +157,7 @@ export interface GetDraftOrdersOptions {
 
 export const getDraftOrders = async (
   admin: AdminApiContext,
-  options: GetDraftOrdersOptions = {}
+  options: GetDraftOrdersOptions = {},
 ): Promise<{ draftOrders: DraftOrder[]; pageInfo: PageInfo }> => {
   const response = await admin.graphql(DRAFT_ORDERS_QUERY, {
     variables: {
@@ -190,7 +195,7 @@ export const getDraftOrders = async (
 
 export const getDraftOrder = async (
   admin: AdminApiContext,
-  id: string
+  id: string,
 ): Promise<DraftOrderDetail | null> => {
   const response = await admin.graphql(DRAFT_ORDER_QUERY, {
     variables: { id },
@@ -210,7 +215,9 @@ export const getDraftOrder = async (
       sku: edge.node.sku ?? null,
       variantTitle: edge.node.variantTitle ?? null,
       image: edge.node.image?.url || null,
-      originalUnitPrice: parseFloat(edge.node.originalUnitPriceSet.shopMoney.amount || "0").toFixed(2),
+      originalUnitPrice: parseFloat(
+        edge.node.originalUnitPriceSet.shopMoney.amount || "0",
+      ).toFixed(2),
     })) || [];
 
   return {
@@ -220,34 +227,41 @@ export const getDraftOrder = async (
     status: draftOrder.status,
     note: draftOrder.note2 ?? null,
     subtotalPrice: draftOrder.subtotalPriceSet.shopMoney.amount || "0.00",
-    totalShippingPrice: draftOrder.totalShippingPriceSet.shopMoney.amount || "0.00",
+    totalShippingPrice:
+      draftOrder.totalShippingPriceSet.shopMoney.amount || "0.00",
     totalTax: draftOrder.totalTaxSet.shopMoney.amount || "0.00",
     totalPrice: draftOrder.totalPriceSet.shopMoney.amount || "0.00",
     currencyCode: draftOrder.totalPriceSet.shopMoney.currencyCode || "USD",
-    customer: draftOrder.customer ? {
-      displayName: draftOrder.customer.displayName,
-      email: draftOrder.customer.defaultEmailAddress?.emailAddress ?? null,
-    } : null,
-    shippingAddress: draftOrder.shippingAddress ? {
-      name: draftOrder.shippingAddress.name ?? null,
-      address1: draftOrder.shippingAddress.address1 ?? null,
-      address2: draftOrder.shippingAddress.address2 ?? null,
-      city: draftOrder.shippingAddress.city ?? null,
-      province: draftOrder.shippingAddress.province ?? null,
-      country: draftOrder.shippingAddress.country ?? null,
-      zip: draftOrder.shippingAddress.zip ?? null,
-      phone: draftOrder.shippingAddress.phone ?? null,
-    } : null,
-    billingAddress: draftOrder.billingAddress ? {
-      name: draftOrder.billingAddress.name ?? null,
-      address1: draftOrder.billingAddress.address1 ?? null,
-      address2: draftOrder.billingAddress.address2 ?? null,
-      city: draftOrder.billingAddress.city ?? null,
-      province: draftOrder.billingAddress.province ?? null,
-      country: draftOrder.billingAddress.country ?? null,
-      zip: draftOrder.billingAddress.zip ?? null,
-      phone: draftOrder.billingAddress.phone ?? null,
-    } : null,
+    customer: draftOrder.customer
+      ? {
+          displayName: draftOrder.customer.displayName,
+          email: draftOrder.customer.defaultEmailAddress?.emailAddress ?? null,
+        }
+      : null,
+    shippingAddress: draftOrder.shippingAddress
+      ? {
+          name: draftOrder.shippingAddress.name ?? null,
+          address1: draftOrder.shippingAddress.address1 ?? null,
+          address2: draftOrder.shippingAddress.address2 ?? null,
+          city: draftOrder.shippingAddress.city ?? null,
+          province: draftOrder.shippingAddress.province ?? null,
+          country: draftOrder.shippingAddress.country ?? null,
+          zip: draftOrder.shippingAddress.zip ?? null,
+          phone: draftOrder.shippingAddress.phone ?? null,
+        }
+      : null,
+    billingAddress: draftOrder.billingAddress
+      ? {
+          name: draftOrder.billingAddress.name ?? null,
+          address1: draftOrder.billingAddress.address1 ?? null,
+          address2: draftOrder.billingAddress.address2 ?? null,
+          city: draftOrder.billingAddress.city ?? null,
+          province: draftOrder.billingAddress.province ?? null,
+          country: draftOrder.billingAddress.country ?? null,
+          zip: draftOrder.billingAddress.zip ?? null,
+          phone: draftOrder.billingAddress.phone ?? null,
+        }
+      : null,
     lineItems,
   };
 };
@@ -262,7 +276,7 @@ export interface UpdateLineItemsInput {
 export const updateDraftOrderLineItems = async (
   admin: AdminApiContext,
   id: string,
-  lineItems: UpdateLineItemsInput[]
+  lineItems: UpdateLineItemsInput[],
 ): Promise<{ success: boolean; error?: string }> => {
   const validLineItems = lineItems.filter((item) => item.variantId !== null);
 

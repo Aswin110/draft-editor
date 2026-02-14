@@ -167,10 +167,7 @@ const DraftOrdersIndex = () => {
               const statusBadge = getStatusBadge(draftOrder.status);
               const clickableId = `row-${extractNumericId(draftOrder.id)}`;
               return (
-                <s-table-row
-                  key={draftOrder.id}
-                  clickDelegate={clickableId}
-                >
+                <s-table-row key={draftOrder.id} clickDelegate={clickableId}>
                   <s-table-cell>
                     <s-clickable
                       id={clickableId}

@@ -3,7 +3,10 @@ import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { SaveBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { getDraftOrder, updateDraftOrderLineItems } from "../models/draft-order.server";
+import {
+  getDraftOrder,
+  updateDraftOrderLineItems,
+} from "../models/draft-order.server";
 import { canEditDraftOrder } from "../models/usage.server";
 import {
   formatAddressLines,
@@ -17,7 +20,10 @@ import { NotesCard } from "../components/NotesCard";
 import { PaymentSummary } from "../components/PaymentSummary";
 import { UpgradeBanner } from "../components/UpgradeBanner";
 import { MONTHLY_PLAN, ANNUAL_PLAN } from "../constants/plans";
-import type { DraftOrderDetail as DraftOrderDetailType, LineItem } from "../types/draft-order";
+import type {
+  DraftOrderDetail as DraftOrderDetailType,
+  LineItem,
+} from "../types/draft-order";
 
 interface LoaderData {
   draftOrder: DraftOrderDetailType;
@@ -359,9 +365,7 @@ const DraftOrderDetailPage = () => {
         </SaveBar>
       )}
 
-      {editingDisabled && (
-        <UpgradeBanner usedCount={usedCount} limit={limit} />
-      )}
+      {editingDisabled && <UpgradeBanner usedCount={usedCount} limit={limit} />}
 
       {!hasActivePlan && !editingDisabled && (
         <s-banner tone="info">
@@ -435,10 +439,7 @@ const DraftOrderDetailPage = () => {
               <s-stack alignItems="center" gap="small">
                 <s-text color="subdued">No products yet</s-text>
                 {!editingDisabled && (
-                  <s-button
-                    onClick={handleAddProducts}
-                    icon="plus"
-                  >
+                  <s-button onClick={handleAddProducts} icon="plus">
                     Add products
                   </s-button>
                 )}

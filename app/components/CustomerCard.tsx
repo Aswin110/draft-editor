@@ -11,9 +11,7 @@ export const CustomerCard = ({ customer }: CustomerCardProps) => {
       {customer ? (
         <s-stack direction="block" gap="small">
           <s-text type="strong">{customer.displayName}</s-text>
-          {customer.email && (
-            <s-text color="subdued">{customer.email}</s-text>
-          )}
+          {customer.email && <s-text color="subdued">{customer.email}</s-text>}
         </s-stack>
       ) : (
         <s-text color="subdued">No customer</s-text>
