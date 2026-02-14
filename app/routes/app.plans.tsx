@@ -19,7 +19,7 @@ import { CheckIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import { MONTHLY_PLAN, ANNUAL_PLAN, FREE_TIER_EDIT_LIMIT } from "../constants/plans";
 import { getMonthlyUsageStatus } from "../models/usage.server";
-import { CurrencyCode, AppPricingInterval } from "../types/admin.types";
+import type { CurrencyCode, AppPricingInterval } from "../types/admin.types.d.ts";
 
 const features = ["Unlimited draft order edits", "Priority support"];
 
@@ -131,8 +131,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           {
             plan: {
               appRecurringPricingDetails: {
-                price: { amount: isAnnual ? 30 : 3, currencyCode: CurrencyCode.Usd },
-                interval: isAnnual ? AppPricingInterval.Annual : AppPricingInterval.Every_30Days,
+                price: { amount: isAnnual ? 30 : 3, currencyCode: "USD" as CurrencyCode },
+                interval: (isAnnual ? "ANNUAL" : "EVERY_30_DAYS") as AppPricingInterval,
               },
             },
           },

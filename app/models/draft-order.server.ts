@@ -1,6 +1,6 @@
 import type { DraftOrder, DraftOrderDetail, LineItem, PageInfo } from "../types/draft-order";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
-import { CurrencyCode } from "../types/admin.types";
+import type { CurrencyCode } from "../types/admin.types.d.ts";
 
 const DRAFT_ORDERS_QUERY = `#graphql
   query getDraftOrders($first: Int, $last: Int, $after: String, $before: String, $reverse: Boolean, $query: String) {
