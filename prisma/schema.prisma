@@ -18,9 +18,8 @@ model Shop {
   shopDomain      String            @unique // e.g. my-store.myshopify.com
   name            String?
   accessToken     String
-  plan            Plan?
-  draftOrderUsage DraftOrderUsage[]
-  createdAt       DateTime          @default(now())
+  plan      Plan?
+  createdAt DateTime @default(now())
   updatedAt       DateTime          @updatedAt
 }
 
@@ -42,17 +41,6 @@ model Session {
   emailVerified       Boolean?  @default(false)
   refreshToken        String?
   refreshTokenExpires DateTime?
-}
-
-model DraftOrderUsage {
-  id            String   @id @default(cuid())
-  shop          Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  shopId        String
-  draftOrderGid String // e.g. "gid://shopify/DraftOrder/123456"
-  editedAt      DateTime @default(now())
-
-  @@unique([shopId, draftOrderGid])
-  @@index([shopId, editedAt])
 }
 
 model Plan {
