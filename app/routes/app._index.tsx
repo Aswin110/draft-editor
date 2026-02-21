@@ -169,12 +169,13 @@ const DraftOrdersIndex = () => {
               return (
                 <s-table-row key={draftOrder.id} clickDelegate={clickableId}>
                   <s-table-cell>
-                    <s-clickable
+                    <s-link
                       id={clickableId}
+                      href={`/app/${extractNumericId(draftOrder.id)}`}
                       onClick={() => handleRowClick(draftOrder.id)}
                     >
                       <s-text type="strong">{draftOrder.name}</s-text>
-                    </s-clickable>
+                    </s-link>
                   </s-table-cell>
                   <s-table-cell>
                     <s-text>
