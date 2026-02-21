@@ -26,6 +26,7 @@ export interface LineItem {
   image: string | null;
   sku: string | null;
   variantTitle: string | null;
+  customAttributes: CustomAttribute[];
 }
 
 export interface CustomAttribute {

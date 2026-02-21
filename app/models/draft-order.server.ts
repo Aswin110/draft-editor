@@ -120,6 +120,10 @@ const DRAFT_ORDER_QUERY = `#graphql
                 amount
               }
             }
+            customAttributes {
+              key
+              value
+            }
           }
         }
       }
@@ -231,6 +235,10 @@ export const getDraftOrder = async (
       originalUnitPrice: parseFloat(
         edge.node.originalUnitPriceSet.shopMoney.amount || "0",
       ).toFixed(2),
+      customAttributes: (edge.node.customAttributes || []).map((attr) => ({
+        key: attr.key,
+        value: attr.value ?? "",
+      })),
     })) || [];
 
   return {
@@ -288,6 +296,7 @@ export interface UpdateLineItemsInput {
   quantity: number;
   originalUnitPrice: string;
   currencyCode: string;
+  customAttributes?: { key: string; value: string }[];
 }
 
 export const updateDraftOrderLineItems = async (
@@ -310,6 +319,13 @@ export const updateDraftOrderLineItems = async (
       amount: parseFloat(item.originalUnitPrice || "0").toFixed(2),
       currencyCode: item.currencyCode as CurrencyCode,
     },
+    ...(item.customAttributes && item.customAttributes.length > 0
+      ? {
+          customAttributes: item.customAttributes.filter(
+            (attr) => attr.key.trim() !== "",
+          ),
+        }
+      : {}),
   }));
 
   const input: Record<string, unknown> = {

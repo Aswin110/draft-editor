@@ -62,11 +62,13 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     quantity: number;
     originalUnitPrice: string;
     currencyCode: string;
+    customAttributes?: { key: string; value: string }[];
   }[] = JSON.parse(lineItemsJson).map(
     (item: {
       variantId: string | null;
       quantity: number;
       originalUnitPrice: string;
+      customAttributes?: { key: string; value: string }[];
     }) => ({
       ...item,
       currencyCode: currencyCode || "USD",
@@ -96,8 +98,8 @@ const DraftOrderDetailPage = () => {
   const shopify = useAppBridge();
 
   const [lineItems, setLineItems] = useState<LineItem[]>(draftOrder.lineItems);
-  const [savedLineItemIds, setSavedLineItemIds] = useState<string[]>(
-    draftOrder.lineItems.map((item) => item.id),
+  const [savedLineItems, setSavedLineItems] = useState<LineItem[]>(
+    draftOrder.lineItems,
   );
   const [customAttributes, setCustomAttributes] = useState<CustomAttribute[]>(
     draftOrder.customAttributes,
@@ -109,21 +111,14 @@ const DraftOrderDetailPage = () => {
   const [savedNote, setSavedNote] = useState<string>(draftOrder.note || "");
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  const [hasNewItems, setHasNewItems] = useState(false);
 
-  const currentIds = lineItems.map((item) => item.id);
-  const hasOrderChanges = savedLineItemIds.some(
-    (id, index) => id !== currentIds[index],
-  );
+  const hasLineItemChanges =
+    JSON.stringify(lineItems) !== JSON.stringify(savedLineItems);
   const hasAttributeChanges =
     JSON.stringify(customAttributes) !== JSON.stringify(savedCustomAttributes);
   const hasNoteChanges = note !== savedNote;
   const hasChanges =
-    hasOrderChanges ||
-    hasNewItems ||
-    hasAttributeChanges ||
-    hasNoteChanges ||
-    lineItems.length !== savedLineItemIds.length;
+    hasLineItemChanges || hasAttributeChanges || hasNoteChanges;
 
   const isSavingRef = useRef(false);
 
@@ -133,10 +128,9 @@ const DraftOrderDetailPage = () => {
       fetcher.state === "idle" &&
       fetcher.data?.success
     ) {
-      setSavedLineItemIds(lineItems.map((item) => item.id));
+      setSavedLineItems([...lineItems]);
       setSavedCustomAttributes([...customAttributes]);
       setSavedNote(note);
-      setHasNewItems(false);
       isSavingRef.current = false;
       shopify.toast.show("Draft order updated");
     }
@@ -247,6 +241,7 @@ const DraftOrderDetailPage = () => {
               originalUnitPrice: variant.price || "0.00",
               sku: variant.sku || null,
               image: variantImage,
+              customAttributes: [],
             });
           }
         });
@@ -254,7 +249,6 @@ const DraftOrderDetailPage = () => {
 
       if (itemsToAdd.length > 0) {
         setLineItems([...lineItems, ...itemsToAdd]);
-        setHasNewItems(true);
       }
     }
   }, [shopify, lineItems]);
@@ -269,6 +263,7 @@ const DraftOrderDetailPage = () => {
           variantId: item.variantId,
           quantity: item.quantity,
           originalUnitPrice: item.originalUnitPrice,
+          customAttributes: item.customAttributes,
         })),
       ),
     );
@@ -280,12 +275,11 @@ const DraftOrderDetailPage = () => {
 
   const handleDiscard = useCallback(() => {
     setLineItems(draftOrder.lineItems);
-    setSavedLineItemIds(draftOrder.lineItems.map((item) => item.id));
+    setSavedLineItems(draftOrder.lineItems);
     setCustomAttributes(draftOrder.customAttributes);
     setSavedCustomAttributes(draftOrder.customAttributes);
     setNote(draftOrder.note || "");
     setSavedNote(draftOrder.note || "");
-    setHasNewItems(false);
   }, [draftOrder.lineItems, draftOrder.customAttributes, draftOrder.note]);
 
   const handleRemoveItem = useCallback((itemId: string) => {
@@ -297,7 +291,6 @@ const DraftOrderDetailPage = () => {
       setLineItems((prev) =>
         prev.map((item) => (item.id === itemId ? { ...item, quantity } : item)),
       );
-      setHasNewItems(true);
     },
     [],
   );
@@ -308,8 +301,20 @@ const DraftOrderDetailPage = () => {
         item.id === itemId ? { ...item, originalUnitPrice: price } : item,
       ),
     );
-    setHasNewItems(true);
   }, []);
+
+  const handlePropertiesChange = useCallback(
+    (itemId: string, properties: CustomAttribute[]) => {
+      setLineItems((prev) =>
+        prev.map((item) =>
+          item.id === itemId
+            ? { ...item, customAttributes: properties }
+            : item,
+        ),
+      );
+    },
+    [],
+  );
 
   const handleOpenInShopify = useCallback(() => {
     const numericId = extractNumericId(draftOrder.id);
@@ -415,6 +420,9 @@ const DraftOrderDetailPage = () => {
                       }
                       onPriceChange={(price) =>
                         handlePriceChange(item.id, price)
+                      }
+                      onPropertiesChange={(properties) =>
+                        handlePropertiesChange(item.id, properties)
                       }
                     />
                   </s-box>
