@@ -2,7 +2,7 @@ import { reactRouter } from "@react-router/dev/vite";
 import { defineConfig, type UserConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 
-const host = new URL(process.env.HOST || "http://localhost").hostname;
+const host = new URL(process.env.SHOPIFY_APP_URL || "http://localhost").hostname;
 
 let hmrConfig;
 if (host === "localhost") {
