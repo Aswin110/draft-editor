@@ -49,6 +49,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   const lineItemsJson = formData.get("lineItems") as string;
   const currencyCode = formData.get("currencyCode") as string;
   const customAttributesJson = formData.get("customAttributes") as string;
+  const note = formData.get("note") as string | null;
 
   if (!lineItemsJson) {
     return { success: false, error: "No line items provided" };
@@ -84,6 +85,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     draftOrderGid,
     lineItems,
     customAttributes,
+    note ?? undefined,
   );
 };
 
@@ -100,8 +102,11 @@ const DraftOrderDetailPage = () => {
   const [customAttributes, setCustomAttributes] = useState<CustomAttribute[]>(
     draftOrder.customAttributes,
   );
-  const [savedCustomAttributes, setSavedCustomAttributes] =
-    useState<CustomAttribute[]>(draftOrder.customAttributes);
+  const [savedCustomAttributes, setSavedCustomAttributes] = useState<
+    CustomAttribute[]
+  >(draftOrder.customAttributes);
+  const [note, setNote] = useState<string>(draftOrder.note || "");
+  const [savedNote, setSavedNote] = useState<string>(draftOrder.note || "");
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [hasNewItems, setHasNewItems] = useState(false);
@@ -112,10 +117,12 @@ const DraftOrderDetailPage = () => {
   );
   const hasAttributeChanges =
     JSON.stringify(customAttributes) !== JSON.stringify(savedCustomAttributes);
+  const hasNoteChanges = note !== savedNote;
   const hasChanges =
     hasOrderChanges ||
     hasNewItems ||
     hasAttributeChanges ||
+    hasNoteChanges ||
     lineItems.length !== savedLineItemIds.length;
 
   const isSavingRef = useRef(false);
@@ -128,11 +135,12 @@ const DraftOrderDetailPage = () => {
     ) {
       setSavedLineItemIds(lineItems.map((item) => item.id));
       setSavedCustomAttributes([...customAttributes]);
+      setSavedNote(note);
       setHasNewItems(false);
       isSavingRef.current = false;
       shopify.toast.show("Draft order updated");
     }
-  }, [fetcher.state, fetcher.data, lineItems, customAttributes, shopify]);
+  }, [fetcher.state, fetcher.data, lineItems, customAttributes, note, shopify]);
 
   const handleDragStart = useCallback((index: number) => {
     setDraggedIndex(index);
@@ -266,16 +274,19 @@ const DraftOrderDetailPage = () => {
     );
     formData.append("currencyCode", draftOrder.currencyCode);
     formData.append("customAttributes", JSON.stringify(customAttributes));
+    formData.append("note", note);
     fetcher.submit(formData, { method: "POST" });
-  }, [lineItems, customAttributes, fetcher, draftOrder.currencyCode]);
+  }, [lineItems, customAttributes, note, fetcher, draftOrder.currencyCode]);
 
   const handleDiscard = useCallback(() => {
     setLineItems(draftOrder.lineItems);
     setSavedLineItemIds(draftOrder.lineItems.map((item) => item.id));
     setCustomAttributes(draftOrder.customAttributes);
     setSavedCustomAttributes(draftOrder.customAttributes);
+    setNote(draftOrder.note || "");
+    setSavedNote(draftOrder.note || "");
     setHasNewItems(false);
-  }, [draftOrder.lineItems, draftOrder.customAttributes]);
+  }, [draftOrder.lineItems, draftOrder.customAttributes, draftOrder.note]);
 
   const handleRemoveItem = useCallback((itemId: string) => {
     setLineItems((prev) => prev.filter((item) => item.id !== itemId));
@@ -310,7 +321,7 @@ const DraftOrderDetailPage = () => {
   return (
     <s-page heading={draftOrder.name}>
       <div slot="aside">
-        {draftOrder.note && <NotesCard note={draftOrder.note} />}
+        <NotesCard note={note || null} onChange={setNote} />
         <CustomAttributesCard
           attributes={customAttributes}
           onChange={setCustomAttributes}

@@ -132,6 +132,7 @@ const UPDATE_DRAFT_ORDER_MUTATION = `#graphql
     draftOrderUpdate(id: $id, input: $input) {
       draftOrder {
         id
+        note2
         customAttributes {
           key
           value
@@ -294,6 +295,7 @@ export const updateDraftOrderLineItems = async (
   id: string,
   lineItems: UpdateLineItemsInput[],
   customAttributes?: { key: string; value: string }[],
+  note?: string,
 ): Promise<{ success: boolean; error?: string }> => {
   const validLineItems = lineItems.filter((item) => item.variantId !== null);
 
@@ -316,6 +318,10 @@ export const updateDraftOrderLineItems = async (
 
   if (customAttributes) {
     input.customAttributes = customAttributes;
+  }
+
+  if (note !== undefined) {
+    input.note = note;
   }
 
   const response = await admin.graphql(UPDATE_DRAFT_ORDER_MUTATION, {

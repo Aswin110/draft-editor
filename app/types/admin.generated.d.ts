@@ -41,7 +41,7 @@ export type DraftOrderUpdateMutationVariables = AdminTypes.Exact<{
 
 
 export type DraftOrderUpdateMutation = { draftOrderUpdate?: AdminTypes.Maybe<{ draftOrder?: AdminTypes.Maybe<(
-      Pick<AdminTypes.DraftOrder, 'id'>
+      Pick<AdminTypes.DraftOrder, 'id' | 'note2'>
       & { customAttributes: Array<Pick<AdminTypes.Attribute, 'key' | 'value'>>, lineItems: { edges: Array<{ node: (
             Pick<AdminTypes.DraftOrderLineItem, 'id' | 'quantity'>
             & { originalUnitPriceSet: { shopMoney: Pick<AdminTypes.MoneyV2, 'amount'> } }
@@ -75,7 +75,7 @@ interface GeneratedQueryTypes {
 }
 
 interface GeneratedMutationTypes {
-  "#graphql\n  mutation draftOrderUpdate($id: ID!, $input: DraftOrderInput!) {\n    draftOrderUpdate(id: $id, input: $input) {\n      draftOrder {\n        id\n        customAttributes {\n          key\n          value\n        }\n        lineItems(first: 50) {\n          edges {\n            node {\n              id\n              quantity\n              originalUnitPriceSet {\n                shopMoney {\n                  amount\n                }\n              }\n            }\n          }\n        }\n      }\n      userErrors {\n        field\n        message\n      }\n    }\n  }\n": {return: DraftOrderUpdateMutation, variables: DraftOrderUpdateMutationVariables},
+  "#graphql\n  mutation draftOrderUpdate($id: ID!, $input: DraftOrderInput!) {\n    draftOrderUpdate(id: $id, input: $input) {\n      draftOrder {\n        id\n        note2\n        customAttributes {\n          key\n          value\n        }\n        lineItems(first: 50) {\n          edges {\n            node {\n              id\n              quantity\n              originalUnitPriceSet {\n                shopMoney {\n                  amount\n                }\n              }\n            }\n          }\n        }\n      }\n      userErrors {\n        field\n        message\n      }\n    }\n  }\n": {return: DraftOrderUpdateMutation, variables: DraftOrderUpdateMutationVariables},
   "#graphql\n        mutation AppSubscriptionCancel($id: ID!) {\n          appSubscriptionCancel(id: $id) {\n            appSubscription {\n              id\n              status\n            }\n            userErrors {\n              field\n              message\n            }\n          }\n        }": {return: AppSubscriptionCancelMutation, variables: AppSubscriptionCancelMutationVariables},
   "#graphql\n    mutation CreateSubscription($name: String!, $lineItems: [AppSubscriptionLineItemInput!]!, $returnUrl: URL!, $test: Boolean!, $trialDays: Int) {\n      appSubscriptionCreate(\n        name: $name\n        lineItems: $lineItems\n        returnUrl: $returnUrl\n        test: $test\n        trialDays: $trialDays\n        replacementBehavior: APPLY_IMMEDIATELY\n      ) {\n        appSubscription {\n          id\n        }\n        confirmationUrl\n        userErrors {\n          field\n          message\n        }\n      }\n    }": {return: CreateSubscriptionMutation, variables: CreateSubscriptionMutationVariables},
 }
