@@ -21,23 +21,31 @@ const shopify = shopifyApp({
   distribution: AppDistribution.AppStore,
   hooks: {
     afterAuth: async ({ session, admin }) => {
-      shopify.registerWebhooks({ session });
+      try {
+        shopify.registerWebhooks({ session });
+      } catch (e) {
+        console.error("Webhook registration error:", e);
+      }
 
-      const response = await admin.graphql(`{ shop { name } }`);
-      const { data } = await response.json();
+      try {
+        const response = await admin.graphql(`{ shop { name } }`);
+        const { data } = await response.json();
 
-      await prisma.shop.upsert({
-        where: { shopDomain: session.shop },
-        update: {
-          accessToken: session.accessToken!,
-          name: data.shop.name,
-        },
-        create: {
-          shopDomain: session.shop,
-          accessToken: session.accessToken!,
-          name: data.shop.name,
-        },
-      });
+        await prisma.shop.upsert({
+          where: { shopDomain: session.shop },
+          update: {
+            accessToken: session.accessToken!,
+            name: data.shop.name,
+          },
+          create: {
+            shopDomain: session.shop,
+            accessToken: session.accessToken!,
+            name: data.shop.name,
+          },
+        });
+      } catch (e) {
+        console.error("afterAuth shop upsert error:", e);
+      }
     },
   },
   billing: {
