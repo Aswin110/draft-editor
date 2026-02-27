@@ -12,8 +12,8 @@ RUN npm ci && npm cache clean --force
 
 COPY . .
 
-# Generate Prisma client and build the app
-RUN npx prisma generate
+# Generate Prisma client (dummy URL needed for generation only, not used at runtime)
+RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate
 RUN npm run build
 
 # Remove devDependencies after build
