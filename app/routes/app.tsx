@@ -5,31 +5,17 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
 import { authenticate } from "../shopify.server";
-import { MONTHLY_PLAN, ANNUAL_PLAN } from "../constants/plans";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, billing, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
 
-  const response = await admin.graphql(
-    `{ shop { name contactEmail shopOwnerName } }`,
-  );
-  const { data } = await response.json();
-
-  const { appSubscriptions } = await billing.check({
-    plans: [MONTHLY_PLAN, ANNUAL_PLAN],
-    isTest: true,
-  });
-  const currentPlan =
-    appSubscriptions.length > 0 ? appSubscriptions[0].name : "Free";
-
-  // eslint-disable-next-line no-undef
   return {
     apiKey: process.env.SHOPIFY_API_KEY || "",
-    shopName: data.shop.name as string,
-    ownerName: data.shop.shopOwnerName as string,
-    ownerEmail: data.shop.contactEmail as string,
+    shopName: "",
+    ownerName: "",
+    ownerEmail: "",
     shopDomain: session.shop,
-    currentPlan,
+    currentPlan: "Free",
   };
 };
 
