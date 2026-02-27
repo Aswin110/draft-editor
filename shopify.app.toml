@@ -1,8 +1,8 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "b41a1fc58122338fe674fa1d7261923d"
+client_id = "1a6287fe921a7765c4f1cac696d431cb"
 name = "draft-editor"
-handle = "draft-edit"
+handle = "draft-mod"
 application_url = "https://draft-editor-production.up.railway.app"
 embedded = true
 
