@@ -5,17 +5,46 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
 import { authenticate } from "../shopify.server";
+import { MONTHLY_PLAN, ANNUAL_PLAN } from "../constants/plans";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, billing, session } = await authenticate.admin(request);
+
+  let shopName = "";
+  let ownerName = "";
+  let ownerEmail = "";
+  let currentPlan = "Free";
+
+  try {
+    const response = await admin.graphql(
+      `{ shop { name contactEmail shopOwnerName } }`,
+    );
+    const { data } = await response.json();
+    shopName = data.shop.name;
+    ownerName = data.shop.shopOwnerName;
+    ownerEmail = data.shop.contactEmail;
+  } catch (e) {
+    console.error("GraphQL shop query error:", e);
+  }
+
+  try {
+    const { appSubscriptions } = await billing.check({
+      plans: [MONTHLY_PLAN, ANNUAL_PLAN],
+      isTest: true,
+    });
+    currentPlan =
+      appSubscriptions.length > 0 ? appSubscriptions[0].name : "Free";
+  } catch (e) {
+    console.error("Billing check error:", e);
+  }
 
   return {
     apiKey: process.env.SHOPIFY_API_KEY || "",
-    shopName: "",
-    ownerName: "",
-    ownerEmail: "",
+    shopName,
+    ownerName,
+    ownerEmail,
     shopDomain: session.shop,
-    currentPlan: "Free",
+    currentPlan,
   };
 };
 
