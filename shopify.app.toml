@@ -3,7 +3,7 @@
 client_id = "b41a1fc58122338fe674fa1d7261923d"
 name = "draft-editor"
 handle = "draft-edit"
-application_url = "https://forestry-trust-fluid-strip.trycloudflare.com"
+application_url = "https://draft-editor-production.up.railway.app"
 embedded = true
 
 [build]
@@ -25,4 +25,4 @@ api_version = "2026-04"
 scopes = "read_draft_orders,write_draft_orders,read_customers,read_products"
 
 [auth]
-redirect_urls = [ "https://forestry-trust-fluid-strip.trycloudflare.com/api/auth" ]
+redirect_urls = [ "https://draft-editor-production.up.railway.app/api/auth" ]
