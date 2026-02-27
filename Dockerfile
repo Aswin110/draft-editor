@@ -5,14 +5,20 @@ EXPOSE 3000
 
 WORKDIR /app
 
-ENV NODE_ENV=production
-
 COPY package.json package-lock.json* ./
 
-RUN npm ci --omit=dev && npm cache clean --force
+# Install ALL dependencies (including dev) for the build step
+RUN npm ci && npm cache clean --force
 
 COPY . .
 
+# Generate Prisma client and build the app
+RUN npx prisma generate
 RUN npm run build
+
+# Remove devDependencies after build
+RUN npm prune --omit=dev
+
+ENV NODE_ENV=production
 
 CMD ["npm", "run", "docker-start"]
