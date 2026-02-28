@@ -18,9 +18,9 @@ const Privacy = () => {
       <section style={{ marginBottom: 28 }}>
         <h2 style={{ fontSize: 20, marginBottom: 8 }}>Introduction</h2>
         <p>
-          Draft Editor ("we", "our", "the app") is a Shopify application that
-          allows merchants to edit draft orders. This privacy policy explains
-          how we collect, use, and protect your data.
+          Draft Editor is a Shopify application that allows merchants to edit
+          draft orders. This privacy policy explains how we collect, use, and
+          protect your data.
         </p>
       </section>
 
@@ -117,8 +117,8 @@ const Privacy = () => {
         <p>
           If you have any questions about this privacy policy or wish to request
           data deletion, please contact us at{" "}
-          <a href="mailto:geondocker@gmail.com" style={{ color: "#2563eb" }}>
-            geondocker@gmail.com
+          <a href="mailto:aswinashok110@gmail.com" style={{ color: "#2563eb" }}>
+            aswinashok110@gmail.com
           </a>
           .
         </p>
