@@ -6,6 +6,7 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
 import { authenticate } from "../shopify.server";
 import { MONTHLY_PLAN, ANNUAL_PLAN } from "../constants/plans";
+import { isTestStore } from "../utils/billing.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, billing, session } = await authenticate.admin(request);
@@ -28,9 +29,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   try {
+    const testStore = await isTestStore(session.shop);
     const { appSubscriptions } = await billing.check({
       plans: [MONTHLY_PLAN, ANNUAL_PLAN],
-      isTest: true,
+      isTest: testStore,
     });
     currentPlan =
       appSubscriptions.length > 0 ? appSubscriptions[0].name : "Free";

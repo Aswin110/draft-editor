@@ -9,6 +9,7 @@ import {
   checkDraftOrderEditability,
 } from "../models/draft-order.server";
 import { MONTHLY_PLAN, ANNUAL_PLAN } from "../constants/plans";
+import { isTestStore } from "../utils/billing.server";
 import {
   formatAddressLines,
   buildShopifyGid,
@@ -33,14 +34,15 @@ interface LoaderData {
 }
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { admin, billing } = await authenticate.admin(request);
+  const { admin, billing, session } = await authenticate.admin(request);
   const { id } = params;
 
   const draftOrderGid = buildShopifyGid("DraftOrder", id!);
+  const testStore = await isTestStore(session.shop);
 
   const [billingResult, draftOrder] = await Promise.all([
     billing
-      .check({ plans: [MONTHLY_PLAN, ANNUAL_PLAN], isTest: true })
+      .check({ plans: [MONTHLY_PLAN, ANNUAL_PLAN], isTest: testStore })
       .catch(() => ({ hasActivePayment: false, appSubscriptions: [] })),
     getDraftOrder(admin, draftOrderGid),
   ]);
@@ -65,13 +67,14 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
-  const { admin, billing } = await authenticate.admin(request);
+  const { admin, billing, session } = await authenticate.admin(request);
   const { id } = params;
 
   const draftOrderGid = buildShopifyGid("DraftOrder", id!);
+  const testStore = await isTestStore(session.shop);
 
   const billingResult = await billing
-    .check({ plans: [MONTHLY_PLAN, ANNUAL_PLAN], isTest: true })
+    .check({ plans: [MONTHLY_PLAN, ANNUAL_PLAN], isTest: testStore })
     .catch(() => ({ hasActivePayment: false, appSubscriptions: [] }));
 
   if (!billingResult.hasActivePayment) {

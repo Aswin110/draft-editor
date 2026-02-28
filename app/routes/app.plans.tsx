@@ -8,6 +8,7 @@ import {
 import { useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { MONTHLY_PLAN, ANNUAL_PLAN } from "../constants/plans";
+import { isTestStore } from "../utils/billing.server";
 import type {
   CurrencyCode,
   AppPricingInterval,
@@ -16,11 +17,12 @@ import type {
 const features = ["Unlimited draft order edits", "Priority support"];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { billing } = await authenticate.admin(request);
+  const { billing, session } = await authenticate.admin(request);
+  const testStore = await isTestStore(session.shop);
 
   const { hasActivePayment, appSubscriptions } = await billing.check({
     plans: [MONTHLY_PLAN, ANNUAL_PLAN],
-    isTest: true,
+    isTest: testStore,
   });
 
   const currentPlan =
@@ -39,10 +41,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const intent = formData.get("intent");
 
   // Handle cancel/unsubscribe
+  const testStore = await isTestStore(session.shop);
+
   if (intent === "cancel") {
     const { appSubscriptions } = await billing.check({
       plans: [MONTHLY_PLAN, ANNUAL_PLAN],
-      isTest: true,
+      isTest: testStore,
     });
 
     if (appSubscriptions.length > 0) {
@@ -108,7 +112,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     {
       variables: {
         name: planName,
-        test: true,
+        test: testStore,
         trialDays: 7,
         returnUrl: `https://admin.shopify.com/store/${shopName}/apps/${process.env.SHOPIFY_API_KEY}/app/plans`,
         lineItems: [
