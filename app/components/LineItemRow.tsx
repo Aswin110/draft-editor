@@ -5,6 +5,7 @@ export interface LineItemRowProps {
   item: LineItem;
   currencyCode: string;
   isDragging: boolean;
+  readOnly?: boolean;
   onDragStart: () => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: () => void;
@@ -20,6 +21,7 @@ export const LineItemRow = ({
   item,
   currencyCode,
   isDragging,
+  readOnly = false,
   onDragStart,
   onDragOver,
   onDragLeave,
@@ -54,23 +56,25 @@ export const LineItemRow = ({
 
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-      onDragEnd={onDragEnd}
+      draggable={!readOnly}
+      onDragStart={readOnly ? undefined : onDragStart}
+      onDragOver={readOnly ? undefined : onDragOver}
+      onDragLeave={readOnly ? undefined : onDragLeave}
+      onDrop={readOnly ? undefined : onDrop}
+      onDragEnd={readOnly ? undefined : onDragEnd}
       style={{
-        cursor: "grab",
+        cursor: readOnly ? "default" : "grab",
         opacity: isDragging ? 0.5 : 1,
         transition: "opacity 0.2s",
       }}
     >
       <s-stack direction="block" gap="small">
         <s-stack direction="inline" gap="base" alignItems="start">
-          <s-box>
-            <s-icon type="drag-handle" tone="neutral"></s-icon>
-          </s-box>
+          {!readOnly && (
+            <s-box>
+              <s-icon type="drag-handle" tone="neutral"></s-icon>
+            </s-box>
+          )}
           <s-box>
             {item.image ? (
               <s-box
@@ -111,38 +115,52 @@ export const LineItemRow = ({
               alignItems="center"
               gap="base"
             >
-              <s-box inlineSize="180px">
-                <s-number-field
-                  label="Price"
-                  labelAccessibilityVisibility="exclusive"
-                  value={item.originalUnitPrice}
-                  onInput={handlePriceChange}
-                  onBlur={handlePriceBlur}
-                  min={0}
-                  step={0.01}
-                ></s-number-field>
-              </s-box>
-              <s-text color="subdued">×</s-text>
-              <s-box inlineSize="80px">
-                <s-number-field
-                  label="Quantity"
-                  labelAccessibilityVisibility="exclusive"
-                  value={item.quantity.toString()}
-                  onInput={handleQuantityChange}
-                  min={1}
-                ></s-number-field>
-              </s-box>
-              <s-text color="subdued">=</s-text>
-              <s-text type="strong">
-                {currencyCode} {totalAmount}
-              </s-text>
-              <s-button
-                icon="x"
-                variant="tertiary"
-                tone="critical"
-                onClick={onRemove}
-                accessibilityLabel={`Remove ${item.title}`}
-              ></s-button>
+              {readOnly ? (
+                <>
+                  <s-text>{item.originalUnitPrice}</s-text>
+                  <s-text color="subdued">×</s-text>
+                  <s-text>{item.quantity}</s-text>
+                  <s-text color="subdued">=</s-text>
+                  <s-text type="strong">
+                    {currencyCode} {totalAmount}
+                  </s-text>
+                </>
+              ) : (
+                <>
+                  <s-box inlineSize="180px">
+                    <s-number-field
+                      label="Price"
+                      labelAccessibilityVisibility="exclusive"
+                      value={item.originalUnitPrice}
+                      onInput={handlePriceChange}
+                      onBlur={handlePriceBlur}
+                      min={0}
+                      step={0.01}
+                    ></s-number-field>
+                  </s-box>
+                  <s-text color="subdued">×</s-text>
+                  <s-box inlineSize="80px">
+                    <s-number-field
+                      label="Quantity"
+                      labelAccessibilityVisibility="exclusive"
+                      value={item.quantity.toString()}
+                      onInput={handleQuantityChange}
+                      min={1}
+                    ></s-number-field>
+                  </s-box>
+                  <s-text color="subdued">=</s-text>
+                  <s-text type="strong">
+                    {currencyCode} {totalAmount}
+                  </s-text>
+                  <s-button
+                    icon="x"
+                    variant="tertiary"
+                    tone="critical"
+                    onClick={onRemove}
+                    accessibilityLabel={`Remove ${item.title}`}
+                  ></s-button>
+                </>
+              )}
             </s-stack>
           </s-box>
         </s-stack>
@@ -150,6 +168,7 @@ export const LineItemRow = ({
           <LineItemProperties
             properties={item.customAttributes}
             onChange={onPropertiesChange}
+            readOnly={readOnly}
           />
         </s-box>
       </s-stack>

@@ -291,6 +291,42 @@ export const getDraftOrder = async (
   };
 };
 
+export const FREE_PLAN_MONTHLY_EDIT_LIMIT = 5;
+
+export const checkDraftOrderEditability = async (
+  admin: AdminApiContext,
+  draftOrderId: string,
+  createdAt: string,
+): Promise<{ readOnly: boolean; position: number }> => {
+  const date = new Date(createdAt);
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth();
+
+  const monthStart = new Date(Date.UTC(year, month, 1));
+  const monthEnd = new Date(Date.UTC(year, month + 1, 1));
+
+  const fmt = (d: Date) => d.toISOString().split("T")[0];
+  const query = `created_at:>=${fmt(monthStart)} created_at:<${fmt(monthEnd)}`;
+
+  const { draftOrders } = await getDraftOrders(admin, {
+    first: 250,
+    reverse: false,
+    query,
+  });
+
+  const position =
+    draftOrders.findIndex((d) => d.id === draftOrderId) + 1;
+
+  if (position === 0) {
+    return { readOnly: true, position: draftOrders.length + 1 };
+  }
+
+  return {
+    readOnly: position > FREE_PLAN_MONTHLY_EDIT_LIMIT,
+    position,
+  };
+};
+
 export interface UpdateLineItemsInput {
   variantId: string | null;
   quantity: number;

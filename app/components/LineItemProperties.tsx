@@ -4,11 +4,13 @@ import type { CustomAttribute } from "../types/draft-order";
 interface LineItemPropertiesProps {
   properties: CustomAttribute[];
   onChange: (properties: CustomAttribute[]) => void;
+  readOnly?: boolean;
 }
 
 export const LineItemProperties = ({
   properties,
   onChange,
+  readOnly = false,
 }: LineItemPropertiesProps) => {
   const [expanded, setExpanded] = useState(properties.length > 0);
 
@@ -47,6 +49,33 @@ export const LineItemProperties = ({
     onChange([...properties, { key: "", value: "" }]);
     setExpanded(true);
   }, [properties, onChange]);
+
+  if (readOnly) {
+    if (properties.length === 0) return null;
+
+    return (
+      <s-stack direction="block" gap="small">
+        {!expanded ? (
+          <s-button
+            variant="tertiary"
+            onClick={() => setExpanded(true)}
+            accessibilityLabel="Show properties"
+          >
+            Properties ({properties.length})
+          </s-button>
+        ) : (
+          <s-stack direction="block" gap="small">
+            {properties.map((prop, index) => (
+              <s-stack key={index} direction="inline" gap="small">
+                <s-text type="strong">{prop.key}:</s-text>
+                <s-text>{prop.value}</s-text>
+              </s-stack>
+            ))}
+          </s-stack>
+        )}
+      </s-stack>
+    );
+  }
 
   return (
     <s-stack direction="block" gap="small">

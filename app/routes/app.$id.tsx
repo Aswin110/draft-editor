@@ -6,7 +6,9 @@ import { authenticate } from "../shopify.server";
 import {
   getDraftOrder,
   updateDraftOrderLineItems,
+  checkDraftOrderEditability,
 } from "../models/draft-order.server";
+import { MONTHLY_PLAN, ANNUAL_PLAN } from "../constants/plans";
 import {
   formatAddressLines,
   buildShopifyGid,
@@ -26,25 +28,70 @@ import type {
 
 interface LoaderData {
   draftOrder: DraftOrderDetailType;
+  readOnly: boolean;
+  draftOrderPosition?: number;
 }
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, billing } = await authenticate.admin(request);
   const { id } = params;
 
   const draftOrderGid = buildShopifyGid("DraftOrder", id!);
-  const draftOrder = await getDraftOrder(admin, draftOrderGid);
+
+  const [billingResult, draftOrder] = await Promise.all([
+    billing
+      .check({ plans: [MONTHLY_PLAN, ANNUAL_PLAN], isTest: true })
+      .catch(() => ({ hasActivePayment: false, appSubscriptions: [] })),
+    getDraftOrder(admin, draftOrderGid),
+  ]);
 
   if (!draftOrder) {
     throw new Response("Draft order not found", { status: 404 });
   }
 
-  return { draftOrder };
+  let readOnly = false;
+  let draftOrderPosition: number | undefined;
+  if (!billingResult.hasActivePayment) {
+    const result = await checkDraftOrderEditability(
+      admin,
+      draftOrder.id,
+      draftOrder.createdAt,
+    );
+    readOnly = result.readOnly;
+    draftOrderPosition = result.position;
+  }
+
+  return { draftOrder, readOnly, draftOrderPosition };
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, billing } = await authenticate.admin(request);
   const { id } = params;
+
+  const draftOrderGid = buildShopifyGid("DraftOrder", id!);
+
+  const billingResult = await billing
+    .check({ plans: [MONTHLY_PLAN, ANNUAL_PLAN], isTest: true })
+    .catch(() => ({ hasActivePayment: false, appSubscriptions: [] }));
+
+  if (!billingResult.hasActivePayment) {
+    const draftOrder = await getDraftOrder(admin, draftOrderGid);
+    if (draftOrder) {
+      const { readOnly } = await checkDraftOrderEditability(
+        admin,
+        draftOrder.id,
+        draftOrder.createdAt,
+      );
+      if (readOnly) {
+        return {
+          success: false,
+          error:
+            "Free plan users can only edit the first 5 draft orders created each month. Please upgrade to continue editing.",
+        };
+      }
+    }
+  }
+
   const formData = await request.formData();
   const lineItemsJson = formData.get("lineItems") as string;
   const currencyCode = formData.get("currencyCode") as string;
@@ -54,8 +101,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   if (!lineItemsJson) {
     return { success: false, error: "No line items provided" };
   }
-
-  const draftOrderGid = buildShopifyGid("DraftOrder", id!);
 
   const lineItems: {
     variantId: string | null;
@@ -92,7 +137,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 };
 
 const DraftOrderDetailPage = () => {
-  const { draftOrder } = useLoaderData<LoaderData>();
+  const { draftOrder, readOnly, draftOrderPosition } =
+    useLoaderData<LoaderData>();
   const navigate = useNavigate();
   const fetcher = useFetcher<{ success: boolean; error?: string }>();
   const shopify = useAppBridge();
@@ -326,10 +372,11 @@ const DraftOrderDetailPage = () => {
   return (
     <s-page heading={draftOrder.name}>
       <div slot="aside">
-        <NotesCard note={note || null} onChange={setNote} />
+        <NotesCard note={note || null} onChange={setNote} readOnly={readOnly} />
         <CustomAttributesCard
           attributes={customAttributes}
           onChange={setCustomAttributes}
+          readOnly={readOnly}
         />
         <CustomerCard customer={draftOrder.customer} />
         <AddressCard
@@ -354,7 +401,7 @@ const DraftOrderDetailPage = () => {
         Open in Shopify
       </s-button>
 
-      <SaveBar id="product-order-save-bar" open={hasChanges}>
+      <SaveBar id="product-order-save-bar" open={hasChanges && !readOnly}>
         <button
           variant="primary"
           onClick={handleSave}
@@ -368,6 +415,23 @@ const DraftOrderDetailPage = () => {
         </button>
       </SaveBar>
 
+      {readOnly && (
+        <s-banner tone="warning">
+          This is the {draftOrderPosition}
+          {draftOrderPosition === 1
+            ? "st"
+            : draftOrderPosition === 2
+              ? "nd"
+              : draftOrderPosition === 3
+                ? "rd"
+                : "th"}{" "}
+          draft order of this month. On the free plan, you can only edit the
+          first 5 draft orders created each month.{" "}
+          <s-link href="/app/plans">Upgrade your plan</s-link> to unlock
+          unlimited editing.
+        </s-banner>
+      )}
+
       <s-section>
         <s-stack direction="block" gap="base">
           <s-stack
@@ -376,18 +440,20 @@ const DraftOrderDetailPage = () => {
             alignItems="center"
           >
             <s-heading>Products</s-heading>
-            <s-stack direction="inline" gap="small" alignItems="center">
-              {lineItems.length > 1 && (
-                <s-text color="subdued">Drag to reorder</s-text>
-              )}
-              <s-button
-                icon="plus"
-                onClick={handleAddProducts}
-                accessibilityLabel="Add products"
-              >
-                Add Products
-              </s-button>
-            </s-stack>
+            {!readOnly && (
+              <s-stack direction="inline" gap="small" alignItems="center">
+                {lineItems.length > 1 && (
+                  <s-text color="subdued">Drag to reorder</s-text>
+                )}
+                <s-button
+                  icon="plus"
+                  onClick={handleAddProducts}
+                  accessibilityLabel="Add products"
+                >
+                  Add Products
+                </s-button>
+              </s-stack>
+            )}
           </s-stack>
           {fetcher.data?.error && (
             <s-banner tone="critical">{fetcher.data.error}</s-banner>
@@ -409,6 +475,7 @@ const DraftOrderDetailPage = () => {
                       item={item}
                       currencyCode={draftOrder.currencyCode}
                       isDragging={draggedIndex === index}
+                      readOnly={readOnly}
                       onDragStart={() => handleDragStart(index)}
                       onDragOver={(e) => handleDragOver(e, index)}
                       onDragLeave={handleDragLeave}
@@ -433,9 +500,11 @@ const DraftOrderDetailPage = () => {
             <s-box padding="base">
               <s-stack alignItems="center" gap="small">
                 <s-text color="subdued">No products yet</s-text>
-                <s-button onClick={handleAddProducts} icon="plus">
-                  Add products
-                </s-button>
+                {!readOnly && (
+                  <s-button onClick={handleAddProducts} icon="plus">
+                    Add products
+                  </s-button>
+                )}
               </s-stack>
             </s-box>
           )}

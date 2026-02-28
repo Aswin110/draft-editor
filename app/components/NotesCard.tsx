@@ -4,9 +4,10 @@ import { NoteEditModal } from "./NoteEditModal";
 interface NotesCardProps {
   note: string | null;
   onChange: (note: string) => void;
+  readOnly?: boolean;
 }
 
-export const NotesCard = ({ note, onChange }: NotesCardProps) => {
+export const NotesCard = ({ note, onChange, readOnly = false }: NotesCardProps) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const handleOpen = useCallback(() => setIsModalOpen(true), []);
@@ -20,12 +21,14 @@ export const NotesCard = ({ note, onChange }: NotesCardProps) => {
         alignItems="center"
       >
         <s-heading>Notes</s-heading>
-        <s-button
-          variant="tertiary"
-          icon="edit"
-          onClick={handleOpen}
-          accessibilityLabel="Edit note"
-        ></s-button>
+        {!readOnly && (
+          <s-button
+            variant="tertiary"
+            icon="edit"
+            onClick={handleOpen}
+            accessibilityLabel="Edit note"
+          ></s-button>
+        )}
       </s-stack>
       {note ? (
         <s-text>{note}</s-text>

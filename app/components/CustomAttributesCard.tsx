@@ -4,11 +4,13 @@ import type { CustomAttribute } from "../types/draft-order";
 interface CustomAttributesCardProps {
   attributes: CustomAttribute[];
   onChange: (attributes: CustomAttribute[]) => void;
+  readOnly?: boolean;
 }
 
 export const CustomAttributesCard = ({
   attributes,
   onChange,
+  readOnly = false,
 }: CustomAttributesCardProps) => {
   const handleKeyChange = useCallback(
     (index: number, e: Event) => {
@@ -45,17 +47,28 @@ export const CustomAttributesCard = ({
     <s-section>
       <s-stack direction="inline" justifyContent="space-between" alignItems="center">
         <s-heading>Custom attributes</s-heading>
-        <s-button
-          variant="tertiary"
-          icon="plus"
-          onClick={handleAdd}
-          accessibilityLabel="Add custom attribute"
-        >
-          Add
-        </s-button>
+        {!readOnly && (
+          <s-button
+            variant="tertiary"
+            icon="plus"
+            onClick={handleAdd}
+            accessibilityLabel="Add custom attribute"
+          >
+            Add
+          </s-button>
+        )}
       </s-stack>
       {attributes.length === 0 ? (
         <s-text color="subdued">No custom attributes</s-text>
+      ) : readOnly ? (
+        <s-stack direction="block" gap="base">
+          {attributes.map((attr, index) => (
+            <s-stack key={index} direction="inline" gap="small">
+              <s-text type="strong">{attr.key}:</s-text>
+              <s-text>{attr.value}</s-text>
+            </s-stack>
+          ))}
+        </s-stack>
       ) : (
         <s-stack direction="block" gap="base">
           {attributes.map((attr, index) => (
