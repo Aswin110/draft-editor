@@ -88,19 +88,24 @@ export const LineItemRow = ({
               </s-box>
             ) : (
               <s-box
-                maxInlineSize="40px"
-                maxBlockSize="40px"
+                inlineSize="40px"
+                blockSize="40px"
                 border="base"
                 borderRadius="base"
                 overflow="hidden"
-                padding="small"
               >
-                <s-icon type="image" tone="neutral"></s-icon>
+                <s-stack
+                  alignItems="center"
+                  justifyContent="center"
+                  blockSize="40px"
+                >
+                  <s-icon type="image" tone="neutral"></s-icon>
+                </s-stack>
               </s-box>
             )}
           </s-box>
           <s-box minInlineSize="120px">
-            <s-stack direction="block" gap="small-300">
+            <s-stack direction="block">
               <s-text type="strong">{item.title}</s-text>
               {item.variantTitle && (
                 <s-text color="subdued">{item.variantTitle}</s-text>
@@ -136,6 +141,7 @@ export const LineItemRow = ({
                       onBlur={handlePriceBlur}
                       min={0}
                       step={0.01}
+                      autocomplete="off"
                     ></s-number-field>
                   </s-box>
                   <s-text color="subdued">×</s-text>
@@ -146,6 +152,7 @@ export const LineItemRow = ({
                       value={item.quantity.toString()}
                       onInput={handleQuantityChange}
                       min={1}
+                      autocomplete="off"
                     ></s-number-field>
                   </s-box>
                   <s-text color="subdued">=</s-text>

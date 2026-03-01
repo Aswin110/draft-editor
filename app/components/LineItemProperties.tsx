@@ -94,6 +94,7 @@ export const LineItemProperties = ({
                 value={prop.key}
                 onInput={(e: Event) => handleKeyChange(index, e)}
                 placeholder="Key"
+                autocomplete="off"
               ></s-text-field>
               <s-text-field
                 label="Value"
@@ -101,6 +102,7 @@ export const LineItemProperties = ({
                 value={prop.value}
                 onInput={(e: Event) => handleValueChange(index, e)}
                 placeholder="Value"
+                autocomplete="off"
               ></s-text-field>
               <s-button
                 variant="tertiary"
@@ -123,7 +125,7 @@ export const LineItemProperties = ({
       )}
       <s-box>
         <s-button
-          variant="tertiary"
+          variant="secondary"
           icon="plus"
           onClick={handleAdd}
           accessibilityLabel="Add property"

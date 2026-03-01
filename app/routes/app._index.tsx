@@ -11,7 +11,7 @@ import {
 } from "../utils/formatters";
 import type { DraftOrder, PageInfo } from "../types/draft-order";
 
-const ITEMS_PER_PAGE = 10;
+const ITEMS_PER_PAGE = 25;
 
 interface LoaderData {
   draftOrders: DraftOrder[];

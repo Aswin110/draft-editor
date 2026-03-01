@@ -80,6 +80,7 @@ export const CustomAttributesCard = ({
                   value={attr.key}
                   onInput={(e: Event) => handleKeyChange(index, e)}
                   placeholder="Key"
+                  autocomplete="off"
                 ></s-text-field>
                 <s-text-field
                   label="Value"
@@ -87,6 +88,7 @@ export const CustomAttributesCard = ({
                   value={attr.value}
                   onInput={(e: Event) => handleValueChange(index, e)}
                   placeholder="Value"
+                  autocomplete="off"
                 ></s-text-field>
               </s-stack>
               <s-button
