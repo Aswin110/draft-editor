@@ -8,7 +8,7 @@ import {
 import { useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { MONTHLY_PLAN, ANNUAL_PLAN } from "../constants/plans";
-import { isTestStore } from "../utils/billing.server";
+import { isTestStore, checkAndSyncBilling, upsertPlan } from "../utils/billing.server";
 import type {
   CurrencyCode,
   AppPricingInterval,
@@ -17,16 +17,15 @@ import type {
 const features = ["Unlimited draft order edits", "Priority support"];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { billing, session } = await authenticate.admin(request);
-  const testStore = await isTestStore(session.shop);
+  const { admin, billing, session } = await authenticate.admin(request);
+  const testStore = await isTestStore(admin);
 
-  const { hasActivePayment, appSubscriptions } = await billing.check({
+  const { hasActivePayment, currentPlan } = await checkAndSyncBilling({
+    billing,
+    shopDomain: session.shop,
     plans: [MONTHLY_PLAN, ANNUAL_PLAN],
     isTest: testStore,
   });
-
-  const currentPlan =
-    appSubscriptions.length > 0 ? appSubscriptions[0].name : null;
 
   return {
     hasActiveSubscription: hasActivePayment,
@@ -41,7 +40,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const intent = formData.get("intent");
 
   // Handle cancel/unsubscribe
-  const testStore = await isTestStore(session.shop);
+  const testStore = await isTestStore(admin);
 
   if (intent === "cancel") {
     const { appSubscriptions } = await billing.check({
@@ -77,6 +76,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return { error: "Failed to cancel subscription" };
       }
 
+      // Persist cancellation to DB
+      await upsertPlan({
+        shopDomain: session.shop,
+        planName: null,
+        status: "cancelled",
+        shopifySubscriptionId: null,
+      });
+
       return { cancelled: true };
     }
 
@@ -87,6 +94,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const isAnnual = formData.get("plan") === "annual";
   const planName = isAnnual ? ANNUAL_PLAN : MONTHLY_PLAN;
   const shopName = session.shop.replace(".myshopify.com", "");
+
+  // Pre-flight: block creating a duplicate subscription for the same plan.
+  // For switching plans, replacementBehavior: APPLY_IMMEDIATELY handles it.
+  const existingCheck = await billing.check({
+    plans: [MONTHLY_PLAN, ANNUAL_PLAN],
+    isTest: testStore,
+  });
+
+  if (
+    existingCheck.hasActivePayment &&
+    existingCheck.appSubscriptions.some((sub) => sub.name === planName)
+  ) {
+    return {
+      error: `You are already subscribed to the ${planName}.`,
+      confirmationUrl: null,
+    };
+  }
 
   const response = await admin.graphql(
     `#graphql
@@ -142,6 +166,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { confirmationUrl: null };
   }
 
+  // Persist pending subscription to DB (will be updated to "active" by
+  // the webhook or the next billing check when the merchant approves)
+  const newSubscriptionId = data?.appSubscriptionCreate?.appSubscription?.id;
+  if (newSubscriptionId) {
+    await upsertPlan({
+      shopDomain: session.shop,
+      planName: planName,
+      status: "pending",
+      shopifySubscriptionId: newSubscriptionId,
+    });
+  }
+
   return {
     confirmationUrl: data?.appSubscriptionCreate?.confirmationUrl ?? null,
   };
@@ -154,6 +190,7 @@ const PlanCard = ({
   description,
   badgeLabel,
   currentPlan,
+  hasActiveSubscription,
   planName,
   isSubmitting,
   submittingPlan,
@@ -165,12 +202,19 @@ const PlanCard = ({
   description: string;
   badgeLabel?: string;
   currentPlan: string | null;
+  hasActiveSubscription: boolean;
   planName: string;
   isSubmitting: boolean;
   submittingPlan: FormDataEntryValue | null;
   onSubscribe: () => void;
 }) => {
   const isCurrentPlan = currentPlan === planName;
+
+  const getButtonLabel = () => {
+    if (isCurrentPlan) return "Current Plan";
+    if (hasActiveSubscription) return `Switch to ${title}`;
+    return "Start 7-Day Free Trial";
+  };
 
   return (
     <s-section>
@@ -214,7 +258,7 @@ const PlanCard = ({
             }
             disabled={isCurrentPlan || isSubmitting || undefined}
           >
-            {isCurrentPlan ? "Current Plan" : "Start 7-Day Free Trial"}
+            {getButtonLabel()}
           </s-button>
         </s-box>
       </s-stack>
@@ -273,6 +317,7 @@ const PlansPage = () => {
           priceLabel="/ month"
           description="7-day free trial, then billed monthly."
           currentPlan={currentPlan}
+          hasActiveSubscription={hasActiveSubscription}
           planName={MONTHLY_PLAN}
           isSubmitting={isSubmitting}
           submittingPlan={submittingPlan ?? null}
@@ -285,6 +330,7 @@ const PlansPage = () => {
           description="7-day free trial, then $2.50/month billed annually."
           badgeLabel="Save 17%"
           currentPlan={currentPlan}
+          hasActiveSubscription={hasActiveSubscription}
           planName={ANNUAL_PLAN}
           isSubmitting={isSubmitting}
           submittingPlan={submittingPlan ?? null}

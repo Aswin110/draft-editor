@@ -8,8 +8,7 @@ import {
   updateDraftOrderLineItems,
   checkDraftOrderEditability,
 } from "../models/draft-order.server";
-import { MONTHLY_PLAN, ANNUAL_PLAN } from "../constants/plans";
-import { isTestStore } from "../utils/billing.server";
+import { getSubscriptionFromDb } from "../utils/billing.server";
 import {
   formatAddressLines,
   buildShopifyGid,
@@ -34,16 +33,16 @@ interface LoaderData {
 }
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { admin, billing, session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const { id } = params;
 
   const draftOrderGid = buildShopifyGid("DraftOrder", id!);
-  const testStore = await isTestStore(session.shop);
 
-  const [billingResult, draftOrder] = await Promise.all([
-    billing
-      .check({ plans: [MONTHLY_PLAN, ANNUAL_PLAN], isTest: testStore })
-      .catch(() => ({ hasActivePayment: false, appSubscriptions: [] })),
+  const [subscription, draftOrder] = await Promise.all([
+    getSubscriptionFromDb(session.shop).catch(() => ({
+      hasActiveSubscription: false,
+      currentPlan: null,
+    })),
     getDraftOrder(admin, draftOrderGid),
   ]);
 
@@ -53,7 +52,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
   let readOnly = false;
   let draftOrderPosition: number | undefined;
-  if (!billingResult.hasActivePayment) {
+  if (!subscription.hasActiveSubscription) {
     const result = await checkDraftOrderEditability(
       admin,
       draftOrder.id,
@@ -67,17 +66,17 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
-  const { admin, billing, session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const { id } = params;
 
   const draftOrderGid = buildShopifyGid("DraftOrder", id!);
-  const testStore = await isTestStore(session.shop);
 
-  const billingResult = await billing
-    .check({ plans: [MONTHLY_PLAN, ANNUAL_PLAN], isTest: testStore })
-    .catch(() => ({ hasActivePayment: false, appSubscriptions: [] }));
+  const subscription = await getSubscriptionFromDb(session.shop).catch(() => ({
+    hasActiveSubscription: false,
+    currentPlan: null,
+  }));
 
-  if (!billingResult.hasActivePayment) {
+  if (!subscription.hasActiveSubscription) {
     const draftOrder = await getDraftOrder(admin, draftOrderGid);
     if (draftOrder) {
       const { readOnly } = await checkDraftOrderEditability(

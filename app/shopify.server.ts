@@ -47,6 +47,27 @@ const shopify = shopifyApp({
         const err = e as { body?: { errors?: { graphQLErrors?: unknown } }; message?: string };
         console.error("afterAuth error:", JSON.stringify(err?.body?.errors?.graphQLErrors ?? err?.message ?? e, null, 2));
       }
+
+      // On install/reinstall, clear any stale plan state in the DB so the
+      // user can request a fresh charge. Shopify cancels app subscriptions
+      // automatically when the app is uninstalled.
+      try {
+        const shop = await prisma.shop.findUnique({
+          where: { shopDomain: session.shop },
+        });
+        if (shop) {
+          await prisma.plan.updateMany({
+            where: { shopId: shop.id },
+            data: {
+              status: "inactive",
+              name: null,
+              shopifySubscriptionId: null,
+            },
+          });
+        }
+      } catch (e) {
+        console.error("Failed to reset plan state on install:", e);
+      }
     },
   },
   billing: {
