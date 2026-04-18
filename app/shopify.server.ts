@@ -52,19 +52,14 @@ const shopify = shopifyApp({
       // user can request a fresh charge. Shopify cancels app subscriptions
       // automatically when the app is uninstalled.
       try {
-        const shop = await prisma.shop.findUnique({
+        await prisma.plan.updateMany({
           where: { shopDomain: session.shop },
+          data: {
+            status: "inactive",
+            name: null,
+            shopifySubscriptionId: null,
+          },
         });
-        if (shop) {
-          await prisma.plan.updateMany({
-            where: { shopId: shop.id },
-            data: {
-              status: "inactive",
-              name: null,
-              shopifySubscriptionId: null,
-            },
-          });
-        }
       } catch (e) {
         console.error("Failed to reset plan state on install:", e);
       }

@@ -42,7 +42,6 @@ export const upsertPlan = async ({
 }) => {
   const shop = await db.shop.findUnique({
     where: { shopDomain },
-    include: { plan: true },
   });
 
   if (!shop) {
@@ -51,7 +50,7 @@ export const upsertPlan = async ({
   }
 
   return db.plan.upsert({
-    where: { shopId: shop.id },
+    where: { shopDomain },
     update: {
       name: planName,
       status,
@@ -59,7 +58,7 @@ export const upsertPlan = async ({
       updatedAt: new Date(),
     },
     create: {
-      shopId: shop.id,
+      shopDomain,
       name: planName,
       status,
       shopifySubscriptionId: shopifySubscriptionId ?? undefined,
