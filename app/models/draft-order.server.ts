@@ -10,6 +10,7 @@ import type {
   GetDraftOrdersQuery,
   GetDraftOrderQuery,
 } from "../types/admin.generated.d.ts";
+import { FREE_PLAN_MONTHLY_EDIT_LIMIT } from "../constants/plans";
 
 const DRAFT_ORDERS_QUERY = `#graphql
   query getDraftOrders($first: Int, $last: Int, $after: String, $before: String, $reverse: Boolean, $query: String) {
@@ -290,8 +291,6 @@ export const getDraftOrder = async (
     })),
   };
 };
-
-export const FREE_PLAN_MONTHLY_EDIT_LIMIT = 5;
 
 export const checkDraftOrderEditability = async (
   admin: AdminApiContext,

@@ -63,11 +63,7 @@ const App = () => {
       window.$crisp.push(["set", "user:nickname", [ownerName]]);
       window.$crisp.push(["set", "user:email", [ownerEmail]]);
       window.$crisp.push(["set", "user:company", [shopName]]);
-      window.$crisp.push([
-        "set",
-        "session:segments",
-        [["draft-edit"]],
-      ]);
+      window.$crisp.push(["set", "session:segments", [["draft-edit"]]]);
       window.$crisp.push([
         "set",
         "session:data",

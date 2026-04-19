@@ -5,16 +5,27 @@ import {
   useNavigation,
   useSubmit,
 } from "react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { authenticate } from "../shopify.server";
-import { MONTHLY_PLAN, ANNUAL_PLAN } from "../constants/plans";
-import { isTestStore, checkAndSyncBilling, upsertPlan } from "../utils/billing.server";
+import {
+  MONTHLY_PLAN,
+  ANNUAL_PLAN,
+  FREE_PLAN_MONTHLY_EDIT_LIMIT,
+} from "../constants/plans";
+import {
+  isTestStore,
+  checkAndSyncBilling,
+  upsertPlan,
+} from "../utils/billing.server";
 import type {
   CurrencyCode,
   AppPricingInterval,
 } from "../types/admin.types.d.ts";
 
-const features = ["Unlimited draft order edits", "Priority support"];
+const paidFeatures = ["Unlimited draft order edits", "Priority support"];
+const freeFeatures = [
+  `Edit the first ${FREE_PLAN_MONTHLY_EDIT_LIMIT} draft orders each month`,
+];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, billing, session } = await authenticate.admin(request);
@@ -189,11 +200,12 @@ const PlanCard = ({
   priceLabel,
   description,
   badgeLabel,
-  currentPlan,
-  hasActiveSubscription,
-  planName,
-  isSubmitting,
-  submittingPlan,
+  features,
+  isCurrentPlan,
+  buttonLabel,
+  buttonLoading,
+  buttonDisabled,
+  buttonCommandFor,
   onSubscribe,
 }: {
   title: string;
@@ -201,24 +213,24 @@ const PlanCard = ({
   priceLabel: string;
   description: string;
   badgeLabel?: string;
-  currentPlan: string | null;
-  hasActiveSubscription: boolean;
-  planName: string;
-  isSubmitting: boolean;
-  submittingPlan: FormDataEntryValue | null;
-  onSubscribe: () => void;
+  features: string[];
+  isCurrentPlan: boolean;
+  buttonLabel?: string;
+  buttonLoading?: boolean;
+  buttonDisabled?: boolean;
+  buttonCommandFor?: string;
+  onSubscribe?: () => void;
 }) => {
-  const isCurrentPlan = currentPlan === planName;
-
-  const getButtonLabel = () => {
-    if (isCurrentPlan) return "Current Plan";
-    if (hasActiveSubscription) return `Switch to ${title}`;
-    return "Start 7-Day Free Trial";
-  };
-
   return (
     <s-section>
-      <s-stack direction="block" gap="base">
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "1rem",
+          height: "100%",
+        }}
+      >
         <s-stack direction="block" gap="small">
           <s-stack direction="inline" gap="small" alignItems="center">
             <s-heading>{title}</s-heading>
@@ -248,27 +260,26 @@ const PlanCard = ({
           ))}
         </s-stack>
 
-        <s-box paddingBlockStart="small">
-          <s-button
-            variant="primary"
-            onClick={onSubscribe}
-            loading={
-              submittingPlan ===
-                (planName === MONTHLY_PLAN ? "monthly" : "annual") || undefined
-            }
-            disabled={isCurrentPlan || isSubmitting || undefined}
-          >
-            {getButtonLabel()}
-          </s-button>
-        </s-box>
-      </s-stack>
+        {buttonLabel && (
+          <div style={{ marginTop: "auto", paddingTop: "0.5rem" }}>
+            <s-button
+              variant="primary"
+              onClick={buttonCommandFor ? undefined : onSubscribe}
+              commandFor={buttonCommandFor}
+              loading={buttonLoading || undefined}
+              disabled={buttonDisabled || undefined}
+            >
+              {buttonLabel}
+            </s-button>
+          </div>
+        )}
+      </div>
     </s-section>
   );
 };
 
 const PlansPage = () => {
-  const { hasActiveSubscription, currentPlan } =
-    useLoaderData<typeof loader>();
+  const { hasActiveSubscription, currentPlan } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submit = useSubmit();
@@ -279,6 +290,15 @@ const PlansPage = () => {
   useEffect(() => {
     if (actionData?.confirmationUrl) {
       open(actionData.confirmationUrl, "_top");
+    }
+  }, [actionData]);
+
+  useEffect(() => {
+    if (actionData?.cancelled) {
+      const modal = document.getElementById("cancel-modal") as
+        | (HTMLElement & { hideOverlay?: () => void })
+        | null;
+      modal?.hideOverlay?.();
     }
   }, [actionData]);
 
@@ -293,98 +313,124 @@ const PlansPage = () => {
   const isCancelling =
     isSubmitting && navigation.formData?.get("intent") === "cancel";
 
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">(
+    currentPlan === ANNUAL_PLAN ? "annual" : "monthly",
+  );
+
   return (
     <s-page heading="Plans">
       <s-stack direction="block" gap="base">
-      {hasActiveSubscription && (
-        <s-banner tone="success">
-          You are currently subscribed to the <strong>{currentPlan}</strong>.
-        </s-banner>
-      )}
+        {hasActiveSubscription && (
+          <s-banner tone="success">
+            You are currently subscribed to the <strong>{currentPlan}</strong>.
+          </s-banner>
+        )}
 
-      {actionData?.cancelled && (
-        <s-banner tone="info">Your subscription has been cancelled.</s-banner>
-      )}
+        {actionData?.cancelled && (
+          <s-banner tone="info">Your subscription has been cancelled.</s-banner>
+        )}
 
-      {actionData?.error && (
-        <s-banner tone="critical">{actionData.error}</s-banner>
-      )}
+        {actionData?.error && (
+          <s-banner tone="critical">{actionData.error}</s-banner>
+        )}
 
-      <s-grid gridTemplateColumns="1fr 1fr" gap="base">
-        <PlanCard
-          title="Monthly"
-          price="$3"
-          priceLabel="/ month"
-          description="7-day free trial, then billed monthly."
-          currentPlan={currentPlan}
-          hasActiveSubscription={hasActiveSubscription}
-          planName={MONTHLY_PLAN}
-          isSubmitting={isSubmitting}
-          submittingPlan={submittingPlan ?? null}
-          onSubscribe={() => handleSubscribe("monthly")}
-        />
-        <PlanCard
-          title="Annual"
-          price="$30"
-          priceLabel="/ year"
-          description="7-day free trial, then $2.50/month billed annually."
-          badgeLabel="Save 17%"
-          currentPlan={currentPlan}
-          hasActiveSubscription={hasActiveSubscription}
-          planName={ANNUAL_PLAN}
-          isSubmitting={isSubmitting}
-          submittingPlan={submittingPlan ?? null}
-          onSubscribe={() => handleSubscribe("annual")}
-        />
-      </s-grid>
-
-      {hasActiveSubscription && (
-        <s-section>
-          <s-stack direction="block" gap="small">
-            <s-heading>Cancel subscription</s-heading>
-            <s-text color="subdued">
-              If you cancel, you will lose access to all paid features at the
-              end of your current billing period.
-            </s-text>
-            <s-box>
-              <s-button
-                tone="critical"
-                commandFor="cancel-modal"
-                disabled={isSubmitting || undefined}
-              >
-                Cancel Subscription
-              </s-button>
-            </s-box>
-          </s-stack>
-
-          <s-modal
-            id="cancel-modal"
-            heading="Cancel subscription?"
+        <s-stack direction="inline" gap="small" alignItems="center">
+          <s-button
+            variant={billingPeriod === "monthly" ? "primary" : "tertiary"}
+            onClick={() => setBillingPeriod("monthly")}
           >
-            <s-text>
-              Are you sure you want to cancel your subscription? You will lose
-              access to unlimited edits and all paid features at the end of your
-              current billing period.
-            </s-text>
-            <s-button
-              slot="primary-action"
-              variant="primary"
-              tone="critical"
-              onClick={handleCancel}
-              loading={isCancelling || undefined}
-            >
-              Yes, cancel subscription
-            </s-button>
-            <s-button
-              slot="secondary-action"
-              commandFor="cancel-modal"
-              command="--hide"
-            >
-              Keep subscription
-            </s-button>
-          </s-modal>
-        </s-section>
-      )}
+            Monthly
+          </s-button>
+          <s-button
+            variant={billingPeriod === "annual" ? "primary" : "tertiary"}
+            onClick={() => setBillingPeriod("annual")}
+          >
+            Annual
+          </s-button>
+          <s-badge tone="success">Save 17% annually</s-badge>
+        </s-stack>
+
+        <s-grid gridTemplateColumns="1fr 1fr" gap="base">
+          <PlanCard
+            title="Free"
+            price="$0"
+            priceLabel="forever"
+            description="Try it out with a limited number of edits each month."
+            features={freeFeatures}
+            isCurrentPlan={!hasActiveSubscription}
+            buttonLabel={
+              !hasActiveSubscription ? "Current Plan" : "Switch to Free"
+            }
+            buttonDisabled={!hasActiveSubscription || isSubmitting}
+            buttonCommandFor={
+              hasActiveSubscription ? "cancel-modal" : undefined
+            }
+          />
+          {billingPeriod === "monthly" ? (
+            <PlanCard
+              title="Monthly"
+              price="$3"
+              priceLabel="/ month"
+              description="7-day free trial, then billed monthly."
+              features={paidFeatures}
+              isCurrentPlan={currentPlan === MONTHLY_PLAN}
+              buttonLabel={
+                currentPlan === MONTHLY_PLAN
+                  ? "Current Plan"
+                  : hasActiveSubscription
+                    ? "Switch to Monthly"
+                    : "Start 7-Day Free Trial"
+              }
+              buttonLoading={submittingPlan === "monthly"}
+              buttonDisabled={currentPlan === MONTHLY_PLAN || isSubmitting}
+              onSubscribe={() => handleSubscribe("monthly")}
+            />
+          ) : (
+            <PlanCard
+              title="Annual"
+              price="$30"
+              priceLabel="/ year"
+              description="7-day free trial, then $2.50/month billed annually."
+              badgeLabel="Save 17%"
+              features={paidFeatures}
+              isCurrentPlan={currentPlan === ANNUAL_PLAN}
+              buttonLabel={
+                currentPlan === ANNUAL_PLAN
+                  ? "Current Plan"
+                  : hasActiveSubscription
+                    ? "Switch to Annual"
+                    : "Start 7-Day Free Trial"
+              }
+              buttonLoading={submittingPlan === "annual"}
+              buttonDisabled={currentPlan === ANNUAL_PLAN || isSubmitting}
+              onSubscribe={() => handleSubscribe("annual")}
+            />
+          )}
+        </s-grid>
+
+        <s-modal id="cancel-modal" heading="Downgrade to Free plan?">
+          <s-text>
+            You will lose access to unlimited edits and all paid features at the
+            end of your current billing period. On the Free plan you can edit
+            the first {FREE_PLAN_MONTHLY_EDIT_LIMIT} draft orders each month.
+          </s-text>
+          <s-button
+            slot="primary-action"
+            variant="primary"
+            tone="critical"
+            onClick={handleCancel}
+            loading={isCancelling || undefined}
+          >
+            Yes, downgrade
+          </s-button>
+          <s-button
+            slot="secondary-action"
+            commandFor="cancel-modal"
+            command="--hide"
+          >
+            Keep my plan
+          </s-button>
+        </s-modal>
       </s-stack>
     </s-page>
   );
