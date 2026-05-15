@@ -5,7 +5,6 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
 import { authenticate } from "../shopify.server";
-// import { getSubscriptionFromDb } from "../utils/billing.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
@@ -13,7 +12,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   let shopName = "";
   let ownerName = "";
   let ownerEmail = "";
-  const currentPlan = "Free";
 
   try {
     const response = await admin.graphql(
@@ -27,23 +25,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("GraphQL shop query error:", e);
   }
 
-  // Plan lookup disabled — app is free for all users.
-  // try {
-  //   const { currentPlan: planFromDb } = await getSubscriptionFromDb(
-  //     session.shop,
-  //   );
-  //   currentPlan = planFromDb ?? "Free";
-  // } catch (e) {
-  //   console.error("Plan lookup error:", e);
-  // }
-
   return {
     apiKey: process.env.SHOPIFY_API_KEY || "",
     shopName,
     ownerName,
     ownerEmail,
     shopDomain: session.shop,
-    currentPlan,
+    currentPlan: "Free",
   };
 };
 

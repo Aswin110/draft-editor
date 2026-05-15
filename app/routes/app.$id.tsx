@@ -6,9 +6,7 @@ import { authenticate } from "../shopify.server";
 import {
   getDraftOrder,
   updateDraftOrderLineItems,
-  // checkDraftOrderEditability,
 } from "../models/draft-order.server";
-// import { getSubscriptionFromDb } from "../utils/billing.server";
 import {
   formatAddressLines,
   buildShopifyGid,
@@ -29,7 +27,6 @@ import type {
 interface LoaderData {
   draftOrder: DraftOrderDetailType;
   readOnly: boolean;
-  draftOrderPosition?: number;
 }
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
@@ -38,33 +35,13 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
   const draftOrderGid = buildShopifyGid("DraftOrder", id!);
 
-  // Plan restrictions disabled — app is free for all users.
-  // const [subscription, draftOrder] = await Promise.all([
-  //   getSubscriptionFromDb(session.shop).catch(() => ({
-  //     hasActiveSubscription: false,
-  //     currentPlan: null,
-  //   })),
-  //   getDraftOrder(admin, draftOrderGid),
-  // ]);
   const draftOrder = await getDraftOrder(admin, draftOrderGid);
 
   if (!draftOrder) {
     throw new Response("Draft order not found", { status: 404 });
   }
 
-  const readOnly = false;
-  const draftOrderPosition: number | undefined = undefined;
-  // if (!subscription.hasActiveSubscription) {
-  //   const result = await checkDraftOrderEditability(
-  //     admin,
-  //     draftOrder.id,
-  //     draftOrder.createdAt,
-  //   );
-  //   readOnly = result.readOnly;
-  //   draftOrderPosition = result.position;
-  // }
-
-  return { draftOrder, readOnly, draftOrderPosition };
+  return { draftOrder, readOnly: false };
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
@@ -72,30 +49,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   const { id } = params;
 
   const draftOrderGid = buildShopifyGid("DraftOrder", id!);
-
-  // Plan restrictions disabled — app is free for all users.
-  // const subscription = await getSubscriptionFromDb(session.shop).catch(() => ({
-  //   hasActiveSubscription: false,
-  //   currentPlan: null,
-  // }));
-  //
-  // if (!subscription.hasActiveSubscription) {
-  //   const draftOrder = await getDraftOrder(admin, draftOrderGid);
-  //   if (draftOrder) {
-  //     const { readOnly } = await checkDraftOrderEditability(
-  //       admin,
-  //       draftOrder.id,
-  //       draftOrder.createdAt,
-  //     );
-  //     if (readOnly) {
-  //       return {
-  //         success: false,
-  //         error:
-  //           "Free plan users can only edit the first 5 draft orders created each month. Please upgrade to continue editing.",
-  //       };
-  //     }
-  //   }
-  // }
 
   const formData = await request.formData();
   const lineItemsJson = formData.get("lineItems") as string;
@@ -416,25 +369,6 @@ const DraftOrderDetailPage = () => {
           Discard
         </button>
       </SaveBar>
-
-      {/* Free-plan upgrade banner disabled — app is free for all users.
-      {readOnly && (
-        <s-banner tone="warning">
-          This is the {draftOrderPosition}
-          {draftOrderPosition === 1
-            ? "st"
-            : draftOrderPosition === 2
-              ? "nd"
-              : draftOrderPosition === 3
-                ? "rd"
-                : "th"}{" "}
-          draft order of this month. On the free plan, you can only edit the
-          first 5 draft orders created each month.{" "}
-          <s-link href="/app/plans">Upgrade your plan</s-link> to unlock
-          unlimited editing.
-        </s-banner>
-      )}
-      */}
 
       <s-section>
         <s-stack direction="block" gap="base">
