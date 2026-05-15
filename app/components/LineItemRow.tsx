@@ -66,6 +66,10 @@ export const LineItemRow = ({
         cursor: readOnly ? "default" : "grab",
         opacity: isDragging ? 0.5 : 1,
         transition: "opacity 0.2s",
+        border: "1px solid #e1e3e5",
+        borderRadius: "8px",
+        background: "#ffffff",
+        padding: "12px",
       }}
     >
       <s-stack direction="block" gap="small">

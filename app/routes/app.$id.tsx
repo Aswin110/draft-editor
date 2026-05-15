@@ -401,9 +401,7 @@ const DraftOrderDetailPage = () => {
               {lineItems.map((item, index) => (
                 <s-box
                   key={item.id}
-                  border="base"
                   borderRadius="base"
-                  padding="base"
                   background={
                     dragOverIndex === index ? "subdued" : undefined
                   }
