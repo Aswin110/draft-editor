@@ -6,9 +6,9 @@ import { authenticate } from "../shopify.server";
 import {
   getDraftOrder,
   updateDraftOrderLineItems,
-  checkDraftOrderEditability,
+  // checkDraftOrderEditability,
 } from "../models/draft-order.server";
-import { getSubscriptionFromDb } from "../utils/billing.server";
+// import { getSubscriptionFromDb } from "../utils/billing.server";
 import {
   formatAddressLines,
   buildShopifyGid,
@@ -33,66 +33,69 @@ interface LoaderData {
 }
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin } = await authenticate.admin(request);
   const { id } = params;
 
   const draftOrderGid = buildShopifyGid("DraftOrder", id!);
 
-  const [subscription, draftOrder] = await Promise.all([
-    getSubscriptionFromDb(session.shop).catch(() => ({
-      hasActiveSubscription: false,
-      currentPlan: null,
-    })),
-    getDraftOrder(admin, draftOrderGid),
-  ]);
+  // Plan restrictions disabled — app is free for all users.
+  // const [subscription, draftOrder] = await Promise.all([
+  //   getSubscriptionFromDb(session.shop).catch(() => ({
+  //     hasActiveSubscription: false,
+  //     currentPlan: null,
+  //   })),
+  //   getDraftOrder(admin, draftOrderGid),
+  // ]);
+  const draftOrder = await getDraftOrder(admin, draftOrderGid);
 
   if (!draftOrder) {
     throw new Response("Draft order not found", { status: 404 });
   }
 
-  let readOnly = false;
-  let draftOrderPosition: number | undefined;
-  if (!subscription.hasActiveSubscription) {
-    const result = await checkDraftOrderEditability(
-      admin,
-      draftOrder.id,
-      draftOrder.createdAt,
-    );
-    readOnly = result.readOnly;
-    draftOrderPosition = result.position;
-  }
+  const readOnly = false;
+  const draftOrderPosition: number | undefined = undefined;
+  // if (!subscription.hasActiveSubscription) {
+  //   const result = await checkDraftOrderEditability(
+  //     admin,
+  //     draftOrder.id,
+  //     draftOrder.createdAt,
+  //   );
+  //   readOnly = result.readOnly;
+  //   draftOrderPosition = result.position;
+  // }
 
   return { draftOrder, readOnly, draftOrderPosition };
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin } = await authenticate.admin(request);
   const { id } = params;
 
   const draftOrderGid = buildShopifyGid("DraftOrder", id!);
 
-  const subscription = await getSubscriptionFromDb(session.shop).catch(() => ({
-    hasActiveSubscription: false,
-    currentPlan: null,
-  }));
-
-  if (!subscription.hasActiveSubscription) {
-    const draftOrder = await getDraftOrder(admin, draftOrderGid);
-    if (draftOrder) {
-      const { readOnly } = await checkDraftOrderEditability(
-        admin,
-        draftOrder.id,
-        draftOrder.createdAt,
-      );
-      if (readOnly) {
-        return {
-          success: false,
-          error:
-            "Free plan users can only edit the first 5 draft orders created each month. Please upgrade to continue editing.",
-        };
-      }
-    }
-  }
+  // Plan restrictions disabled — app is free for all users.
+  // const subscription = await getSubscriptionFromDb(session.shop).catch(() => ({
+  //   hasActiveSubscription: false,
+  //   currentPlan: null,
+  // }));
+  //
+  // if (!subscription.hasActiveSubscription) {
+  //   const draftOrder = await getDraftOrder(admin, draftOrderGid);
+  //   if (draftOrder) {
+  //     const { readOnly } = await checkDraftOrderEditability(
+  //       admin,
+  //       draftOrder.id,
+  //       draftOrder.createdAt,
+  //     );
+  //     if (readOnly) {
+  //       return {
+  //         success: false,
+  //         error:
+  //           "Free plan users can only edit the first 5 draft orders created each month. Please upgrade to continue editing.",
+  //       };
+  //     }
+  //   }
+  // }
 
   const formData = await request.formData();
   const lineItemsJson = formData.get("lineItems") as string;
@@ -139,8 +142,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 };
 
 const DraftOrderDetailPage = () => {
-  const { draftOrder, readOnly, draftOrderPosition } =
-    useLoaderData<LoaderData>();
+  const { draftOrder, readOnly } = useLoaderData<LoaderData>();
   const navigate = useNavigate();
   const fetcher = useFetcher<{ success: boolean; error?: string }>();
   const shopify = useAppBridge();
@@ -355,9 +357,7 @@ const DraftOrderDetailPage = () => {
     (itemId: string, properties: CustomAttribute[]) => {
       setLineItems((prev) =>
         prev.map((item) =>
-          item.id === itemId
-            ? { ...item, customAttributes: properties }
-            : item,
+          item.id === itemId ? { ...item, customAttributes: properties } : item,
         ),
       );
     },
@@ -417,6 +417,7 @@ const DraftOrderDetailPage = () => {
         </button>
       </SaveBar>
 
+      {/* Free-plan upgrade banner disabled — app is free for all users.
       {readOnly && (
         <s-banner tone="warning">
           This is the {draftOrderPosition}
@@ -433,6 +434,7 @@ const DraftOrderDetailPage = () => {
           unlimited editing.
         </s-banner>
       )}
+      */}
 
       <s-section>
         <s-stack direction="block" gap="base">
