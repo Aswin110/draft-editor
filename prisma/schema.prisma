@@ -17,7 +17,6 @@ model Shop {
   shopDomain  String   @id // e.g. my-store.myshopify.com
   name        String?
   accessToken String
-  plan        Plan?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -46,17 +45,3 @@ model Session {
   refreshTokenExpires DateTime?
 }
 
-model Plan {
-  id                    String    @id @default(cuid())
-  shop                  Shop      @relation(fields: [shopDomain], references: [shopDomain], onDelete: Cascade)
-  shopDomain            String    @unique
-  name                  String?
-  status                String    @default("inactive") // inactive, trial, active, cancelled, expired
-  trialStartDate        DateTime?
-  trialEndDate          DateTime?
-  currentPeriodStart    DateTime?
-  currentPeriodEnd      DateTime?
-  shopifySubscriptionId String?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-}

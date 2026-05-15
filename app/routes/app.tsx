@@ -31,14 +31,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ownerName,
     ownerEmail,
     shopDomain: session.shop,
-    currentPlan: "Free",
   };
 };
 
 const CRISP_WEBSITE_ID = "36f18c89-59c6-466f-8523-fc8023bd3a7c";
 
 const App = () => {
-  const { apiKey, shopName, ownerName, ownerEmail, shopDomain, currentPlan } =
+  const { apiKey, shopName, ownerName, ownerEmail, shopDomain } =
     useLoaderData<typeof loader>();
 
   useEffect(() => {
@@ -56,16 +55,11 @@ const App = () => {
       window.$crisp.push([
         "set",
         "session:data",
-        [
-          [
-            ["shop", shopDomain],
-            ["plan", currentPlan],
-          ],
-        ],
+        [[["shop", shopDomain]]],
       ]);
     };
     document.head.appendChild(script);
-  }, [shopName, shopDomain, currentPlan, ownerName, ownerEmail]);
+  }, [shopName, shopDomain, ownerName, ownerEmail]);
 
   return (
     <AppProvider embedded apiKey={apiKey}>

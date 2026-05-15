@@ -18,6 +18,21 @@ import { LineItemRow } from "../components/LineItemRow";
 import { NotesCard } from "../components/NotesCard";
 import { CustomAttributesCard } from "../components/CustomAttributesCard";
 import { PaymentSummary } from "../components/PaymentSummary";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import type {
   DraftOrderDetail as DraftOrderDetailType,
   LineItem,
@@ -112,8 +127,13 @@ const DraftOrderDetailPage = () => {
   >(draftOrder.customAttributes);
   const [note, setNote] = useState<string>(draftOrder.note || "");
   const [savedNote, setSavedNote] = useState<string>(draftOrder.note || "");
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
 
   const hasLineItemChanges =
     JSON.stringify(lineItems) !== JSON.stringify(savedLineItems);
@@ -139,47 +159,15 @@ const DraftOrderDetailPage = () => {
     }
   }, [fetcher.state, fetcher.data, lineItems, customAttributes, note, shopify]);
 
-  const handleDragStart = useCallback((index: number) => {
-    setDraggedIndex(index);
-  }, []);
-
-  const handleDragOver = useCallback(
-    (e: React.DragEvent, index: number) => {
-      e.preventDefault();
-      if (draggedIndex !== null && draggedIndex !== index) {
-        setDragOverIndex(index);
-      }
-    },
-    [draggedIndex],
-  );
-
-  const handleDragLeave = useCallback(() => {
-    setDragOverIndex(null);
-  }, []);
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent, dropIndex: number) => {
-      e.preventDefault();
-      if (draggedIndex === null || draggedIndex === dropIndex) {
-        setDraggedIndex(null);
-        setDragOverIndex(null);
-        return;
-      }
-
-      const newItems = [...lineItems];
-      const [draggedItem] = newItems.splice(draggedIndex, 1);
-      newItems.splice(dropIndex, 0, draggedItem);
-      setLineItems(newItems);
-
-      setDraggedIndex(null);
-      setDragOverIndex(null);
-    },
-    [draggedIndex, lineItems],
-  );
-
-  const handleDragEnd = useCallback(() => {
-    setDraggedIndex(null);
-    setDragOverIndex(null);
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setLineItems((items) => {
+      const oldIndex = items.findIndex((it) => it.id === active.id);
+      const newIndex = items.findIndex((it) => it.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return items;
+      return arrayMove(items, oldIndex, newIndex);
+    });
   }, []);
 
   const handleAddProducts = useCallback(async () => {
@@ -397,39 +385,37 @@ const DraftOrderDetailPage = () => {
             <s-banner tone="critical">{fetcher.data.error}</s-banner>
           )}
           {lineItems.length > 0 ? (
-            <s-stack direction="block" gap="small-300">
-              {lineItems.map((item, index) => (
-                <s-box
-                  key={item.id}
-                  borderRadius="base"
-                  background={
-                    dragOverIndex === index ? "subdued" : undefined
-                  }
-                >
-                  <LineItemRow
-                    item={item}
-                    currencyCode={draftOrder.currencyCode}
-                    isDragging={draggedIndex === index}
-                    readOnly={readOnly}
-                    onDragStart={() => handleDragStart(index)}
-                    onDragOver={(e) => handleDragOver(e, index)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDrop(e, index)}
-                    onDragEnd={handleDragEnd}
-                    onRemove={() => handleRemoveItem(item.id)}
-                    onQuantityChange={(qty) =>
-                      handleQuantityChange(item.id, qty)
-                    }
-                    onPriceChange={(price) =>
-                      handlePriceChange(item.id, price)
-                    }
-                    onPropertiesChange={(properties) =>
-                      handlePropertiesChange(item.id, properties)
-                    }
-                  />
-                </s-box>
-              ))}
-            </s-stack>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={lineItems.map((it) => it.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <s-stack direction="block" gap="small-300">
+                  {lineItems.map((item) => (
+                    <LineItemRow
+                      key={item.id}
+                      item={item}
+                      currencyCode={draftOrder.currencyCode}
+                      readOnly={readOnly}
+                      onRemove={() => handleRemoveItem(item.id)}
+                      onQuantityChange={(qty) =>
+                        handleQuantityChange(item.id, qty)
+                      }
+                      onPriceChange={(price) =>
+                        handlePriceChange(item.id, price)
+                      }
+                      onPropertiesChange={(properties) =>
+                        handlePropertiesChange(item.id, properties)
+                      }
+                    />
+                  ))}
+                </s-stack>
+              </SortableContext>
+            </DndContext>
           ) : (
             <s-box padding="base">
               <s-stack alignItems="center" gap="small">

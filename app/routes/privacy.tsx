@@ -57,10 +57,6 @@ const Privacy = () => {
             <strong>Session data</strong> — authentication tokens required to
             securely connect to your store
           </li>
-          <li>
-            <strong>Subscription status</strong> — your current plan and billing
-            information managed through Shopify
-          </li>
         </ul>
         <p>
           We do not store your draft order content, product data, or customer
@@ -75,7 +71,6 @@ const Privacy = () => {
         <ul style={{ paddingLeft: 24 }}>
           <li>Authenticate your store and maintain your session</li>
           <li>Display and edit draft orders as requested by you</li>
-          <li>Manage your subscription plan</li>
         </ul>
         <p>
           We do not sell, share, or transfer your data to any third parties.

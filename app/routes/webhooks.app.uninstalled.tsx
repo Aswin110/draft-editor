@@ -13,20 +13,5 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await db.session.deleteMany({ where: { shop } });
   }
 
-  // Clear plan state so a reinstall starts fresh (no stale "active" subscription
-  // blocking new charge requests).
-  try {
-    await db.plan.updateMany({
-      where: { shopDomain: shop },
-      data: {
-        status: "cancelled",
-        name: null,
-        shopifySubscriptionId: null,
-      },
-    });
-  } catch (e) {
-    console.error("Failed to clear plan on uninstall:", e);
-  }
-
   return new Response();
 };

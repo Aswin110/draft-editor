@@ -1,16 +1,12 @@
 import type { LineItem, CustomAttribute } from "../types/draft-order";
 import { LineItemProperties } from "./LineItemProperties";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 export interface LineItemRowProps {
   item: LineItem;
   currencyCode: string;
-  isDragging: boolean;
   readOnly?: boolean;
-  onDragStart: () => void;
-  onDragOver: (e: React.DragEvent) => void;
-  onDragLeave: () => void;
-  onDrop: (e: React.DragEvent) => void;
-  onDragEnd: () => void;
   onRemove: () => void;
   onQuantityChange: (quantity: number) => void;
   onPriceChange: (price: string) => void;
@@ -20,13 +16,7 @@ export interface LineItemRowProps {
 export const LineItemRow = ({
   item,
   currencyCode,
-  isDragging,
   readOnly = false,
-  onDragStart,
-  onDragOver,
-  onDragLeave,
-  onDrop,
-  onDragEnd,
   onRemove,
   onQuantityChange,
   onPriceChange,
@@ -35,6 +25,27 @@ export const LineItemRow = ({
   const totalAmount = (
     parseFloat(item.originalUnitPrice || "0") * item.quantity
   ).toFixed(2);
+
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.id, disabled: readOnly });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    border: "1px solid #e1e3e5",
+    borderRadius: "8px",
+    background: "#ffffff",
+    padding: "12px",
+    zIndex: isDragging ? 1 : 0,
+    position: "relative",
+  };
 
   const handlePriceChange = (e: Event) => {
     const value = (e.currentTarget as HTMLInputElement).value;
@@ -55,29 +66,18 @@ export const LineItemRow = ({
   };
 
   return (
-    <div
-      draggable={!readOnly}
-      onDragStart={readOnly ? undefined : onDragStart}
-      onDragOver={readOnly ? undefined : onDragOver}
-      onDragLeave={readOnly ? undefined : onDragLeave}
-      onDrop={readOnly ? undefined : onDrop}
-      onDragEnd={readOnly ? undefined : onDragEnd}
-      style={{
-        cursor: readOnly ? "default" : "grab",
-        opacity: isDragging ? 0.5 : 1,
-        transition: "opacity 0.2s",
-        border: "1px solid #e1e3e5",
-        borderRadius: "8px",
-        background: "#ffffff",
-        padding: "12px",
-      }}
-    >
+    <div ref={setNodeRef} style={style}>
       <s-stack direction="block" gap="small">
         <s-stack direction="inline" gap="base" alignItems="start">
           {!readOnly && (
-            <s-box>
+            <div
+              {...attributes}
+              {...listeners}
+              style={{ cursor: "grab", touchAction: "none" }}
+              aria-label="Drag to reorder"
+            >
               <s-icon type="drag-handle" tone="neutral"></s-icon>
-            </s-box>
+            </div>
           )}
           <s-box>
             {item.image ? (
