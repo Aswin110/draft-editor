@@ -463,40 +463,38 @@ const DraftOrderDetailPage = () => {
             <s-banner tone="critical">{fetcher.data.error}</s-banner>
           )}
           {lineItems.length > 0 ? (
-            <s-stack direction="block" gap="base">
+            <s-stack direction="block" gap="small-300">
               {lineItems.map((item, index) => (
                 <s-box
                   key={item.id}
-                  border={dragOverIndex === index ? "base" : undefined}
+                  border="base"
                   borderRadius="base"
+                  padding="base"
+                  background={
+                    dragOverIndex === index ? "subdued" : undefined
+                  }
                 >
-                  {index > 0 && <s-divider></s-divider>}
-                  <s-box
-                    paddingBlockStart={index > 0 ? "base" : undefined}
-                    paddingBlockEnd="small-300"
-                  >
-                    <LineItemRow
-                      item={item}
-                      currencyCode={draftOrder.currencyCode}
-                      isDragging={draggedIndex === index}
-                      readOnly={readOnly}
-                      onDragStart={() => handleDragStart(index)}
-                      onDragOver={(e) => handleDragOver(e, index)}
-                      onDragLeave={handleDragLeave}
-                      onDrop={(e) => handleDrop(e, index)}
-                      onDragEnd={handleDragEnd}
-                      onRemove={() => handleRemoveItem(item.id)}
-                      onQuantityChange={(qty) =>
-                        handleQuantityChange(item.id, qty)
-                      }
-                      onPriceChange={(price) =>
-                        handlePriceChange(item.id, price)
-                      }
-                      onPropertiesChange={(properties) =>
-                        handlePropertiesChange(item.id, properties)
-                      }
-                    />
-                  </s-box>
+                  <LineItemRow
+                    item={item}
+                    currencyCode={draftOrder.currencyCode}
+                    isDragging={draggedIndex === index}
+                    readOnly={readOnly}
+                    onDragStart={() => handleDragStart(index)}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, index)}
+                    onDragEnd={handleDragEnd}
+                    onRemove={() => handleRemoveItem(item.id)}
+                    onQuantityChange={(qty) =>
+                      handleQuantityChange(item.id, qty)
+                    }
+                    onPriceChange={(price) =>
+                      handlePriceChange(item.id, price)
+                    }
+                    onPropertiesChange={(properties) =>
+                      handlePropertiesChange(item.id, properties)
+                    }
+                  />
                 </s-box>
               ))}
             </s-stack>
