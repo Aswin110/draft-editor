@@ -18,17 +18,17 @@ const Privacy = () => {
       <section style={{ marginBottom: 28 }}>
         <h2 style={{ fontSize: 20, marginBottom: 8 }}>Introduction</h2>
         <p>
-          Draft Editor is a Shopify application that allows merchants to edit
-          draft orders. This privacy policy explains how we collect, use, and
-          protect your data.
+          Draft Pen is a Shopify application that allows merchants to edit draft
+          orders. This privacy policy explains how we collect, use, and protect
+          your data.
         </p>
       </section>
 
       <section style={{ marginBottom: 28 }}>
         <h2 style={{ fontSize: 20, marginBottom: 8 }}>Data We Access</h2>
         <p>
-          When you install Draft Editor, we request access to the following
-          Shopify data through the Shopify API:
+          When you install Draft Pen, we request access to the following Shopify
+          data through the Shopify API:
         </p>
         <ul style={{ paddingLeft: 24 }}>
           <li>
@@ -73,7 +73,8 @@ const Privacy = () => {
           <li>Display and edit draft orders as requested by you</li>
         </ul>
         <p>
-          We do not sell, share, or transfer your data to any third parties.
+          We do not sell or transfer your data to any third parties for
+          marketing or advertising purposes.
         </p>
       </section>
 
@@ -92,7 +93,7 @@ const Privacy = () => {
           Data Retention and Deletion
         </h2>
         <p>
-          When you uninstall Draft Editor, your session data is automatically
+          When you uninstall Draft Pen, your session data is automatically
           removed. If you would like all stored data related to your store to be
           deleted, please contact us and we will process your request promptly.
         </p>
