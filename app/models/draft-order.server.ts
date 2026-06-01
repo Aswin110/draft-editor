@@ -1,4 +1,5 @@
 import type {
+  CustomerDraftOrder,
   DraftOrder,
   DraftOrderDetail,
   LineItem,
@@ -162,6 +163,167 @@ const UPDATE_DRAFT_ORDER_MUTATION = `#graphql
     }
   }
 `;
+
+const CUSTOMER_DRAFT_ORDER_FIELDS = `#graphql
+  fragment CustomerDraftOrderFields on DraftOrder {
+    id
+    name
+    createdAt
+    status
+    invoiceUrl
+    totalPriceSet {
+      shopMoney {
+        amount
+        currencyCode
+      }
+    }
+    lineItems(first: 50) {
+      edges {
+        node {
+          title
+          quantity
+          variantTitle
+          image {
+            url
+          }
+          originalUnitPriceSet {
+            shopMoney {
+              amount
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+const CUSTOMER_DRAFT_ORDERS_QUERY = `#graphql
+  query getCustomerDraftOrders($query: String!) {
+    draftOrders(first: 10, query: $query, sortKey: NUMBER, reverse: true) {
+      edges {
+        node {
+          ...CustomerDraftOrderFields
+        }
+      }
+    }
+  }
+  ${CUSTOMER_DRAFT_ORDER_FIELDS}
+`;
+
+// Preview-only: most recent draft orders regardless of customer. Used to give
+// the customer account extension something to render in the dev preview, where
+// there's no logged-in customer (no `sub` claim). Never used in production.
+const RECENT_DRAFT_ORDERS_QUERY = `#graphql
+  query getRecentDraftOrders($first: Int!) {
+    draftOrders(first: $first, reverse: true) {
+      edges {
+        node {
+          ...CustomerDraftOrderFields
+        }
+      }
+    }
+  }
+  ${CUSTOMER_DRAFT_ORDER_FIELDS}
+`;
+
+interface CustomerDraftOrderNode {
+  id: string;
+  name: string;
+  createdAt: string;
+  status: string;
+  invoiceUrl: string | null;
+  totalPriceSet: {
+    shopMoney: { amount: string | null; currencyCode: string | null };
+  };
+  lineItems: {
+    edges: {
+      node: {
+        title: string;
+        quantity: number;
+        variantTitle: string | null;
+        image: { url: string } | null;
+        originalUnitPriceSet: { shopMoney: { amount: string | null } };
+      };
+    }[];
+  };
+}
+
+interface CustomerDraftOrdersResponse {
+  draftOrders: { edges: { node: CustomerDraftOrderNode }[] };
+}
+
+const mapCustomerDraftOrder = (
+  node: CustomerDraftOrderNode,
+): CustomerDraftOrder => ({
+  id: node.id,
+  name: node.name,
+  createdAt: node.createdAt,
+  status: node.status,
+  invoiceUrl: node.invoiceUrl ?? null,
+  totalPrice: node.totalPriceSet.shopMoney.amount || "0.00",
+  currencyCode: node.totalPriceSet.shopMoney.currencyCode || "USD",
+  lineItems: node.lineItems.edges.map((item) => ({
+    title: item.node.title,
+    variantTitle: item.node.variantTitle ?? null,
+    quantity: item.node.quantity,
+    image: item.node.image?.url ?? null,
+    unitPrice: parseFloat(
+      item.node.originalUnitPriceSet.shopMoney.amount || "0",
+    ).toFixed(2),
+  })),
+});
+
+/**
+ * Fetches all draft orders belonging to a single customer. Used by the
+ * customer account UI extension so a shopper can see the draft orders a
+ * merchant created for them and pay via the secure invoice URL.
+ *
+ * @param customerId - The customer's gid (e.g. "gid://shopify/Customer/123").
+ */
+export const getCustomerDraftOrders = async (
+  admin: AdminApiContext,
+  customerId: string,
+): Promise<CustomerDraftOrder[]> => {
+  const numericId = customerId.includes("/")
+    ? customerId.split("/").pop()
+    : customerId;
+
+  if (!numericId) return [];
+
+  const response = await admin.graphql(CUSTOMER_DRAFT_ORDERS_QUERY, {
+    variables: { query: `customer_id:${numericId}` },
+  });
+
+  const { data } = (await response.json()) as {
+    data?: CustomerDraftOrdersResponse;
+  };
+
+  return data?.draftOrders.edges.map((edge) => mapCustomerDraftOrder(edge.node)) || [];
+};
+
+/**
+ * Preview-only: fetches the store's most recent draft orders regardless of
+ * which customer they belong to. The customer account extension's dev preview
+ * has no logged-in customer (no `sub` claim), so the normal customer-scoped
+ * lookup returns nothing. This gives the preview some data to render.
+ *
+ * MUST NOT be used in production — it would expose one customer's draft orders
+ * to any caller. The loader gates this behind a non-production check.
+ */
+export const getRecentDraftOrders = async (
+  admin: AdminApiContext,
+  first = 2,
+): Promise<CustomerDraftOrder[]> => {
+  const response = await admin.graphql(RECENT_DRAFT_ORDERS_QUERY, {
+    variables: { first },
+  });
+
+  const { data } = (await response.json()) as {
+    data?: CustomerDraftOrdersResponse;
+  };
+
+  return data?.draftOrders.edges.map((edge) => mapCustomerDraftOrder(edge.node)) || [];
+};
 
 export interface GetDraftOrdersOptions {
   first?: number;

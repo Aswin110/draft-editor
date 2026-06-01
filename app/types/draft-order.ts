@@ -63,6 +63,25 @@ export interface PageInfo {
   endCursor: string | null;
 }
 
+export interface CustomerDraftLineItem {
+  title: string;
+  variantTitle: string | null;
+  quantity: number;
+  image: string | null;
+  unitPrice: string;
+}
+
+export interface CustomerDraftOrder {
+  id: string;
+  name: string;
+  createdAt: string;
+  status: string;
+  totalPrice: string;
+  currencyCode: string;
+  invoiceUrl: string | null;
+  lineItems: CustomerDraftLineItem[];
+}
+
 export type DraftOrderStatus = "OPEN" | "INVOICE_SENT" | "COMPLETED";
 
 export interface StatusBadgeConfig {

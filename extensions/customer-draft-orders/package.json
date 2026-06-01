@@ -1,0 +1,12 @@
+{
+  "name": "customer-draft-orders",
+  "private": true,
+  "version": "1.0.0",
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "@preact/signals": "^2.3.0",
+    "@shopify/ui-extensions": "2026.4.x",
+    "preact": "^10.29.2"
+  }
+}

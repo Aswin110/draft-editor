@@ -1,0 +1,16 @@
+{
+  "name": "Customer Draft Orders ",
+  "heading": "Draft orders",
+  "description": "Orders prepared for you. Pay to complete your purchase.",
+  "empty": "You have no draft orders right now.",
+  "error": "We couldn't load your draft orders. Please try again later.",
+  "colOrder": "Draft order",
+  "colTotal": "Total",
+  "colStatus": "Status",
+  "viewItems": "View items",
+  "makePayment": "Make payment",
+  "qty": {
+    "one": "Qty {{count}}",
+    "other": "Qty {{count}}"
+  }
+}

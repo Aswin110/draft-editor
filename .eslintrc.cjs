@@ -62,6 +62,9 @@ module.exports = {
           },
           typescript: {
             alwaysTryTypes: true,
+            // Include extension tsconfigs so subpath exports like
+            // "@shopify/ui-extensions/customer-account/preact" resolve.
+            project: ["tsconfig.json", "extensions/*/tsconfig.json"],
           },
         },
       },
