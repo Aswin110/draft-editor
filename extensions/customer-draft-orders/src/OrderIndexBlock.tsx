@@ -8,14 +8,29 @@ import {
 import type { I18n } from "@shopify/ui-extensions/customer-account";
 
 /**
- * Base URL of the app backend that serves draft orders.
+ * Base URL of the app backend that serves draft orders. UI extensions run in a
+ * null-origin web worker, so this must be an absolute URL.
  *
- * In production this is the app's stable application_url. For local
- * development with `shopify app dev`, replace it with the tunnel URL the CLI
- * prints (e.g. https://xxxx.trycloudflare.com), since UI extensions run in a
- * null-origin web worker and must call an absolute URL.
+ * The Shopify CLI replaces `process.env.NODE_ENV` with a string literal when it
+ * bundles the extension: "production" on `shopify app deploy`, "development" on
+ * `shopify app dev`. So deployed builds always hit Railway, and dev builds hit
+ * the local server through the tunnel — which is where the dev-only sample-data
+ * fallback lives. A deployed build can never accidentally ship the tunnel URL.
+ *
+ * DEV note: update DEV_APP_URL with the tunnel URL the CLI prints each time you
+ * run `shopify app dev` (e.g. https://xxxx.trycloudflare.com), unless you use a
+ * stable tunnel.
  */
-const APP_URL = "https://draft-editor-production.up.railway.app";
+// `process` is not a real global in the worker; the bundler substitutes
+// `process.env.NODE_ENV` with a string literal at build time. Declare it so
+// TypeScript is satisfied without pulling in all of @types/node.
+declare const process: { env: { NODE_ENV?: string } };
+
+const PROD_APP_URL = "https://draft-editor-production.up.railway.app";
+const DEV_APP_URL = "https://REPLACE-WITH-CURRENT-TUNNEL.trycloudflare.com";
+
+const APP_URL =
+  process.env.NODE_ENV === "production" ? PROD_APP_URL : DEV_APP_URL;
 const ENDPOINT = `${APP_URL}/api/customer-draft-orders`;
 
 interface DraftLineItem {
