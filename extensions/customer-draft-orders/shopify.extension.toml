@@ -1,0 +1,17 @@
+api_version = "2026-04"
+
+[[extensions]]
+name = "Customer Draft Orders"
+handle = "customer-draft-orders"
+uid = "71f68473-c7e6-c229-101b-d9d8f873759044e7b530"
+type = "ui_extension"
+
+  [[extensions.targeting]]
+  target = "customer-account.order-index.block.render"
+  module = "./src/OrderIndexBlock.tsx"
+
+  [extensions.capabilities]
+  # Required so the extension can fetch draft orders from the app backend.
+  # You must also enable "Allow network access" in the Partner Dashboard
+  # (App > API access > Allow network access in checkout and account UI extensions).
+  network_access = true
