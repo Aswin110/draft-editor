@@ -211,30 +211,24 @@ const DraftOrderDetailPage = () => {
         }
 
         variants.forEach((variant) => {
-          const alreadyExists = lineItems.some(
-            (li) => li.variantId === variant.id,
-          );
+          const variantImage =
+            variant.image?.originalSrc || variant.image?.url || productImage;
 
-          if (!alreadyExists) {
-            const variantImage =
-              variant.image?.originalSrc || variant.image?.url || productImage;
-
-            itemsToAdd.push({
-              id: `new-${variant.id}-${Date.now()}-${Math.random()}`,
-              variantId: variant.id,
-              title: typedProduct.title,
-              variantTitle:
-                variant.title !== "Default Title" &&
-                variant.title !== typedProduct.title
-                  ? variant.title
-                  : null,
-              quantity: 1,
-              originalUnitPrice: variant.price || "0.00",
-              sku: variant.sku || null,
-              image: variantImage,
-              customAttributes: [],
-            });
-          }
+          itemsToAdd.push({
+            id: `new-${variant.id}-${Date.now()}-${Math.random()}`,
+            variantId: variant.id,
+            title: typedProduct.title,
+            variantTitle:
+              variant.title !== "Default Title" &&
+              variant.title !== typedProduct.title
+                ? variant.title
+                : null,
+            quantity: 1,
+            originalUnitPrice: variant.price || "0.00",
+            sku: variant.sku || null,
+            image: variantImage,
+            customAttributes: [],
+          });
         });
       });
 
