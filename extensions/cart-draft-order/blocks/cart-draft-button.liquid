@@ -14,7 +14,11 @@
   data-success-message="{{ block.settings.success_message | escape }}"
   {{ block.shopify_attributes }}
 >
-  <button type="button" class="cart-draft-order__button button">
+  <button
+    type="button"
+    class="cart-draft-order__button button button--full-width"
+    style="width: 100%; display: block;"
+  >
     {{ block.settings.button_label | default: 'Create draft order' }}
   </button>
   <p class="cart-draft-order__message" role="status" hidden></p>
