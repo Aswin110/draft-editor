@@ -34,6 +34,12 @@ export interface CustomAttribute {
   value: string;
 }
 
+export interface PropertyTemplate {
+  id: string;
+  name: string;
+  properties: CustomAttribute[];
+}
+
 export interface DraftOrder {
   id: string;
   name: string;
@@ -79,6 +85,7 @@ export interface CustomerDraftLineItem {
   quantity: number;
   image: string | null;
   unitPrice: string;
+  customAttributes: CustomAttribute[];
 }
 
 // Variant options for a single draft order, keyed by line item gid. Loaded

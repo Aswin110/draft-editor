@@ -95,6 +95,7 @@ interface UpdateBody {
   draftOrderId?: unknown;
   quantities?: unknown;
   variants?: unknown;
+  properties?: unknown;
 }
 
 /**
@@ -193,9 +194,52 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
   }
 
+  // Validate and sanitize the properties map: line item gid -> array of
+  // { key, value } string pairs. The customer fills in line item properties
+  // (e.g. an engraving name or number) on their own draft order.
+  const properties: Record<string, { key: string; value: string }[]> = {};
+  if (body.properties !== undefined) {
+    if (!isPlainObject(body.properties)) {
+      return cors(
+        Response.json(
+          { success: false, error: "Invalid properties" },
+          { status: 400 },
+        ),
+      );
+    }
+    for (const [lineItemId, value] of Object.entries(body.properties)) {
+      if (!Array.isArray(value)) {
+        return cors(
+          Response.json(
+            { success: false, error: "Invalid properties" },
+            { status: 400 },
+          ),
+        );
+      }
+      const attributes: { key: string; value: string }[] = [];
+      for (const attr of value) {
+        if (
+          !isPlainObject(attr) ||
+          typeof attr.key !== "string" ||
+          typeof attr.value !== "string"
+        ) {
+          return cors(
+            Response.json(
+              { success: false, error: "Invalid properties" },
+              { status: 400 },
+            ),
+          );
+        }
+        attributes.push({ key: attr.key, value: attr.value });
+      }
+      properties[lineItemId] = attributes;
+    }
+  }
+
   if (
     Object.keys(quantities).length === 0 &&
-    Object.keys(variants).length === 0
+    Object.keys(variants).length === 0 &&
+    Object.keys(properties).length === 0
   ) {
     return cors(
       Response.json(
@@ -213,6 +257,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       draftOrderId,
       quantities,
       variants,
+      properties,
     );
     return cors(
       Response.json(result, { status: result.success ? 200 : 400 }),

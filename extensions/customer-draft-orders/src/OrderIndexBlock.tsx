@@ -30,7 +30,8 @@ import type {
 declare const process: { env: { NODE_ENV?: string } };
 
 const PROD_APP_URL = "https://draft-editor-production.up.railway.app";
-const DEV_APP_URL = "https://REPLACE-WITH-CURRENT-TUNNEL.trycloudflare.com";
+const DEV_APP_URL =
+  " https://berlin-constraints-browse-unknown.trycloudflare.com";
 
 const APP_URL =
   process.env.NODE_ENV === "production" ? PROD_APP_URL : DEV_APP_URL;
@@ -44,6 +45,11 @@ interface VariantOption {
   image: string | null;
 }
 
+interface LineItemProperty {
+  key: string;
+  value: string;
+}
+
 interface DraftLineItem {
   id: string;
   variantId: string | null;
@@ -52,6 +58,7 @@ interface DraftLineItem {
   quantity: number;
   image: string | null;
   unitPrice: string;
+  customAttributes: LineItemProperty[];
 }
 
 // Variant options for an order, keyed by line item id. Loaded on demand (per
@@ -189,6 +196,16 @@ function DraftOrderCard({
         .map((item) => [item.id, item.variantId as string]),
     ),
   );
+  const [properties, setProperties] = useState<
+    Record<string, LineItemProperty[]>
+  >(() =>
+    Object.fromEntries(
+      order.lineItems.map((item) => [
+        item.id,
+        item.customAttributes.map((attr) => ({ ...attr })),
+      ]),
+    ),
+  );
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
 
@@ -211,6 +228,14 @@ function DraftOrderCard({
         order.lineItems
           .filter((item) => item.variantId)
           .map((item) => [item.id, item.variantId as string]),
+      ),
+    );
+    setProperties(
+      Object.fromEntries(
+        order.lineItems.map((item) => [
+          item.id,
+          item.customAttributes.map((attr) => ({ ...attr })),
+        ]),
       ),
     );
   }, [order.lineItems]);
@@ -244,10 +269,23 @@ function DraftOrderCard({
     };
   }, [expanded, editable, order.id, order.lineItems, sessionToken]);
 
+  // Compare a line item's edited properties against its saved ones, ignoring
+  // rows the customer left completely blank.
+  const propertiesChanged = (item: DraftLineItem): boolean => {
+    const edited = (properties[item.id] ?? [])
+      .map((attr) => ({ key: attr.key.trim(), value: attr.value.trim() }))
+      .filter((attr) => attr.key !== "");
+    const original = item.customAttributes
+      .map((attr) => ({ key: attr.key.trim(), value: attr.value.trim() }))
+      .filter((attr) => attr.key !== "");
+    return JSON.stringify(edited) !== JSON.stringify(original);
+  };
+
   const dirty = order.lineItems.some(
     (item) =>
       quantities[item.id] !== item.quantity ||
-      (variantSelections[item.id] ?? item.variantId) !== item.variantId,
+      (variantSelections[item.id] ?? item.variantId) !== item.variantId ||
+      propertiesChanged(item),
   );
 
   async function handleSave() {
@@ -257,6 +295,7 @@ function DraftOrderCard({
       // Only send the line items that actually changed.
       const changedQuantities: Record<string, number> = {};
       const changedVariants: Record<string, string> = {};
+      const changedProperties: Record<string, LineItemProperty[]> = {};
       for (const item of order.lineItems) {
         if (quantities[item.id] !== item.quantity) {
           changedQuantities[item.id] = quantities[item.id];
@@ -264,6 +303,11 @@ function DraftOrderCard({
         const selectedVariant = variantSelections[item.id];
         if (selectedVariant && selectedVariant !== item.variantId) {
           changedVariants[item.id] = selectedVariant;
+        }
+        if (propertiesChanged(item)) {
+          changedProperties[item.id] = (properties[item.id] ?? [])
+            .map((attr) => ({ key: attr.key.trim(), value: attr.value.trim() }))
+            .filter((attr) => attr.key !== "");
         }
       }
 
@@ -278,6 +322,7 @@ function DraftOrderCard({
           draftOrderId: order.id,
           quantities: changedQuantities,
           variants: changedVariants,
+          properties: changedProperties,
         }),
       });
       const result = (await response.json()) as {
@@ -296,6 +341,33 @@ function DraftOrderCard({
     } finally {
       setSaving(false);
     }
+  }
+
+  function updateProperty(
+    itemId: string,
+    index: number,
+    field: "key" | "value",
+    value: string,
+  ) {
+    setProperties((current) => {
+      const rows = (current[itemId] ?? []).map((attr) => ({ ...attr }));
+      rows[index] = { ...rows[index], [field]: value };
+      return { ...current, [itemId]: rows };
+    });
+  }
+
+  function addProperty(itemId: string) {
+    setProperties((current) => ({
+      ...current,
+      [itemId]: [...(current[itemId] ?? []), { key: "", value: "" }],
+    }));
+  }
+
+  function removeProperty(itemId: string, index: number) {
+    setProperties((current) => ({
+      ...current,
+      [itemId]: (current[itemId] ?? []).filter((_, i) => i !== index),
+    }));
   }
 
   return (
@@ -439,6 +511,82 @@ function DraftOrderCard({
                           </s-box>
                         )}
                       </s-stack>
+                    )}
+
+                    {editable ? (
+                      <s-stack direction="block" gap="small-300">
+                        {(properties[item.id] ?? []).map((attr, index) => (
+                          <s-stack
+                            key={index}
+                            direction="inline"
+                            gap="small-300"
+                            alignItems="end"
+                          >
+                            <s-text-field
+                              label={i18n.translate("propertyNameLabel")}
+                              value={attr.key}
+                              disabled={saving}
+                              onInput={(event: Event) => {
+                                const target =
+                                  event.currentTarget as HTMLInputElement | null;
+                                if (!target) return;
+                                updateProperty(
+                                  item.id,
+                                  index,
+                                  "key",
+                                  target.value,
+                                );
+                              }}
+                            ></s-text-field>
+                            <s-text-field
+                              label={i18n.translate("propertyValueLabel")}
+                              value={attr.value}
+                              disabled={saving}
+                              onInput={(event: Event) => {
+                                const target =
+                                  event.currentTarget as HTMLInputElement | null;
+                                if (!target) return;
+                                updateProperty(
+                                  item.id,
+                                  index,
+                                  "value",
+                                  target.value,
+                                );
+                              }}
+                            ></s-text-field>
+                            <s-button
+                              variant="secondary"
+                              tone="critical"
+                              disabled={saving}
+                              accessibilityLabel={i18n.translate(
+                                "removeProperty",
+                              )}
+                              onClick={() => removeProperty(item.id, index)}
+                            >
+                              {i18n.translate("removeProperty")}
+                            </s-button>
+                          </s-stack>
+                        ))}
+                        <s-stack direction="inline">
+                          <s-button
+                            variant="secondary"
+                            disabled={saving}
+                            onClick={() => addProperty(item.id)}
+                          >
+                            {i18n.translate("addProperty")}
+                          </s-button>
+                        </s-stack>
+                      </s-stack>
+                    ) : (
+                      item.customAttributes.length > 0 && (
+                        <s-stack direction="block" gap="none">
+                          {item.customAttributes.map((attr, index) => (
+                            <s-text key={index} color="subdued">
+                              {attr.key}: {attr.value}
+                            </s-text>
+                          ))}
+                        </s-stack>
+                      )
                     )}
                   </s-stack>
                 );

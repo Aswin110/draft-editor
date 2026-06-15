@@ -196,6 +196,10 @@ const CUSTOMER_DRAFT_ORDER_FIELDS = `#graphql
           variant {
             id
           }
+          customAttributes {
+            key
+            value
+          }
         }
       }
     }
@@ -250,6 +254,7 @@ interface CustomerDraftOrderNode {
         image: { url: string } | null;
         originalUnitPriceSet: { shopMoney: { amount: string | null } };
         variant: { id: string } | null;
+        customAttributes: { key: string; value: string | null }[];
       };
     }[];
   };
@@ -282,6 +287,10 @@ const mapCustomerDraftOrder = (
     unitPrice: parseFloat(
       item.node.originalUnitPriceSet.shopMoney.amount || "0",
     ).toFixed(2),
+    customAttributes: (item.node.customAttributes || []).map((attr) => ({
+      key: attr.key,
+      value: attr.value ?? "",
+    })),
   })),
 });
 
@@ -757,6 +766,9 @@ const numericId = (gid: string): string | undefined =>
  *
  * @param quantities - Map of line item gid -> new quantity (must be >= 1).
  * @param variants - Map of line item gid -> target variant gid.
+ * @param properties - Map of line item gid -> full custom attribute list. When
+ *   a line item id is present, its attributes replace the existing ones;
+ *   otherwise the existing attributes are preserved.
  */
 export const updateCustomerDraftOrderLineItems = async (
   admin: AdminApiContext,
@@ -764,6 +776,7 @@ export const updateCustomerDraftOrderLineItems = async (
   draftOrderId: string,
   quantities: Record<string, number>,
   variants: Record<string, string>,
+  properties: Record<string, { key: string; value: string }[]> = {},
 ): Promise<{ success: boolean; error?: string }> => {
   const response = await admin.graphql(CUSTOMER_DRAFT_UPDATE_QUERY, {
     variables: { id: draftOrderId },
@@ -830,10 +843,17 @@ export const updateCustomerDraftOrderLineItems = async (
       quantity: quantities[node.id] ?? node.quantity,
       originalUnitPrice: unitPrice,
       currencyCode,
-      customAttributes: node.customAttributes.map((attr) => ({
-        key: attr.key,
-        value: attr.value ?? "",
-      })),
+      // Customer-edited attributes replace the existing set when provided;
+      // otherwise the merchant's existing attributes are preserved.
+      customAttributes: (
+        properties[node.id] ??
+        node.customAttributes.map((attr) => ({
+          key: attr.key,
+          value: attr.value ?? "",
+        }))
+      )
+        .map((attr) => ({ key: attr.key.trim(), value: (attr.value ?? "").trim() }))
+        .filter((attr) => attr.key !== ""),
     });
   }
 

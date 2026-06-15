@@ -37,26 +37,32 @@ import type {
   DraftOrderDetail as DraftOrderDetailType,
   LineItem,
   CustomAttribute,
+  PropertyTemplate,
 } from "../types/draft-order";
+import { listPropertyTemplates } from "../models/property-template.server";
 
 interface LoaderData {
   draftOrder: DraftOrderDetailType;
   readOnly: boolean;
+  templates: PropertyTemplate[];
 }
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const { id } = params;
 
   const draftOrderGid = buildShopifyGid("DraftOrder", id!);
 
-  const draftOrder = await getDraftOrder(admin, draftOrderGid);
+  const [draftOrder, templates] = await Promise.all([
+    getDraftOrder(admin, draftOrderGid),
+    listPropertyTemplates(session.shop),
+  ]);
 
   if (!draftOrder) {
     throw new Response("Draft order not found", { status: 404 });
   }
 
-  return { draftOrder, readOnly: false };
+  return { draftOrder, readOnly: false, templates };
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
@@ -110,7 +116,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 };
 
 const DraftOrderDetailPage = () => {
-  const { draftOrder, readOnly } = useLoaderData<LoaderData>();
+  const { draftOrder, readOnly, templates } = useLoaderData<LoaderData>();
   const navigate = useNavigate();
   const fetcher = useFetcher<{ success: boolean; error?: string }>();
   const shopify = useAppBridge();
@@ -395,6 +401,7 @@ const DraftOrderDetailPage = () => {
                       item={item}
                       currencyCode={draftOrder.currencyCode}
                       readOnly={readOnly}
+                      templates={templates}
                       onRemove={() => handleRemoveItem(item.id)}
                       onQuantityChange={(qty) =>
                         handleQuantityChange(item.id, qty)

@@ -25,6 +25,17 @@ model AdminStore {
   name String @id
 }
 
+model PropertyTemplate {
+  id         String   @id @default(cuid())
+  shop       String
+  name       String
+  properties Json     @default("[]")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([shop])
+}
+
 model Session {
   id                  String    @id
   shop                String

@@ -1,4 +1,8 @@
-import type { LineItem, CustomAttribute } from "../types/draft-order";
+import type {
+  LineItem,
+  CustomAttribute,
+  PropertyTemplate,
+} from "../types/draft-order";
 import { LineItemProperties } from "./LineItemProperties";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -7,6 +11,7 @@ export interface LineItemRowProps {
   item: LineItem;
   currencyCode: string;
   readOnly?: boolean;
+  templates?: PropertyTemplate[];
   onRemove: () => void;
   onQuantityChange: (quantity: number) => void;
   onPriceChange: (price: string) => void;
@@ -17,6 +22,7 @@ export const LineItemRow = ({
   item,
   currencyCode,
   readOnly = false,
+  templates = [],
   onRemove,
   onQuantityChange,
   onPriceChange,
@@ -180,6 +186,8 @@ export const LineItemRow = ({
             properties={item.customAttributes}
             onChange={onPropertiesChange}
             readOnly={readOnly}
+            templates={templates}
+            modalId={`add-property-${item.id}`}
           />
         </s-box>
       </s-stack>

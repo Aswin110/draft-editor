@@ -11,6 +11,10 @@
   "makePayment": "Make payment",
   "quantityLabel": "Quantity",
   "variantLabel": "Variant",
+  "propertyNameLabel": "Name",
+  "propertyValueLabel": "Value",
+  "addProperty": "Add property",
+  "removeProperty": "Remove",
   "save": "Update draft order",
   "saveError": "We couldn't save your changes. Please try again.",
   "qty": {

@@ -65,6 +65,7 @@ const App = () => {
     <AppProvider embedded apiKey={apiKey}>
       <s-app-nav>
         <s-link href="/app">Draft Orders</s-link>
+        <s-link href="/app/property-templates">Property Templates</s-link>
       </s-app-nav>
       <Outlet />
     </AppProvider>

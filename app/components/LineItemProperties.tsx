@@ -1,16 +1,21 @@
 import { useState, useCallback } from "react";
-import type { CustomAttribute } from "../types/draft-order";
+import type { CustomAttribute, PropertyTemplate } from "../types/draft-order";
+import { AddPropertyModal } from "./AddPropertyModal";
 
 interface LineItemPropertiesProps {
   properties: CustomAttribute[];
   onChange: (properties: CustomAttribute[]) => void;
   readOnly?: boolean;
+  templates?: PropertyTemplate[];
+  modalId: string;
 }
 
 export const LineItemProperties = ({
   properties,
   onChange,
   readOnly = false,
+  templates = [],
+  modalId,
 }: LineItemPropertiesProps) => {
   const [expanded, setExpanded] = useState(properties.length > 0);
 
@@ -45,10 +50,13 @@ export const LineItemProperties = ({
     [properties, onChange],
   );
 
-  const handleAdd = useCallback(() => {
-    onChange([...properties, { key: "", value: "" }]);
-    setExpanded(true);
-  }, [properties, onChange]);
+  const handleAddFromModal = useCallback(
+    (added: CustomAttribute[]) => {
+      onChange([...properties, ...added]);
+      setExpanded(true);
+    },
+    [properties, onChange],
+  );
 
   if (readOnly) {
     if (properties.length === 0) return null;
@@ -127,12 +135,18 @@ export const LineItemProperties = ({
         <s-button
           variant="secondary"
           icon="plus"
-          onClick={handleAdd}
+          command="--show"
+          commandFor={modalId}
           accessibilityLabel="Add property"
         >
           Add property
         </s-button>
       </s-box>
+      <AddPropertyModal
+        id={modalId}
+        templates={templates}
+        onAdd={handleAddFromModal}
+      />
     </s-stack>
   );
 };
