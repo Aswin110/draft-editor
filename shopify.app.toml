@@ -24,6 +24,11 @@ api_version = "2026-04"
   compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
   uri = "/webhooks/compliance"
 
+[app_proxy]
+url = "https://draft-editor-production.up.railway.app/proxy"
+subpath = "draft-cart"
+prefix = "apps"
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "read_draft_orders,write_draft_orders,read_customers,read_products"

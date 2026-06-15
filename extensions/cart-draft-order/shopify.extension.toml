@@ -1,0 +1,7 @@
+api_version = "2026-04"
+
+[[extensions]]
+name = "Cart draft order"
+handle = "cart-draft-order"
+uid = "390517a8-9ca7-5331-7b80-c0234a4381c48a7cb1f7"
+type = "theme"

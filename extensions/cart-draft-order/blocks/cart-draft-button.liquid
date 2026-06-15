@@ -1,0 +1,47 @@
+{%- liquid
+  assign is_logged_in = false
+  if customer
+    assign is_logged_in = true
+  endif
+-%}
+
+<div
+  class="cart-draft-order"
+  data-proxy-url="/apps/draft-cart/create-draft-order"
+  data-logged-in="{{ is_logged_in }}"
+  data-login-url="{{ routes.account_login_url }}"
+  data-return-url="{{ routes.cart_url }}"
+  data-success-message="{{ block.settings.success_message | escape }}"
+  {{ block.shopify_attributes }}
+>
+  <button type="button" class="cart-draft-order__button button">
+    {{ block.settings.button_label | default: 'Create draft order' }}
+  </button>
+  <p class="cart-draft-order__message" role="status" hidden></p>
+</div>
+
+{% schema %}
+{
+  "name": "Create draft order",
+  "target": "section",
+  "enabled_on": {
+    "templates": ["cart"]
+  },
+  "javascript": "cart-draft-order.js",
+  "settings": [
+    {
+      "type": "text",
+      "id": "button_label",
+      "label": "Button label",
+      "default": "Create draft order"
+    },
+    {
+      "type": "text",
+      "id": "success_message",
+      "label": "Success message",
+      "info": "Shown after the draft order is created. {name} is replaced with the order name.",
+      "default": "Draft order {name} created. We'll be in touch to complete it."
+    }
+  ]
+}
+{% endschema %}

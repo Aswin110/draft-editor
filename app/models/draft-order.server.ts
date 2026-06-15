@@ -165,6 +165,22 @@ const UPDATE_DRAFT_ORDER_MUTATION = `#graphql
   }
 `;
 
+const CREATE_DRAFT_ORDER_MUTATION = `#graphql
+  mutation draftOrderCreate($input: DraftOrderInput!) {
+    draftOrderCreate(input: $input) {
+      draftOrder {
+        id
+        name
+        invoiceUrl
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
 const CUSTOMER_DRAFT_ORDER_FIELDS = `#graphql
   fragment CustomerDraftOrderFields on DraftOrder {
     id
@@ -674,6 +690,71 @@ export const updateDraftOrderLineItems = async (
   return { success: true };
 };
 
+export interface CreateDraftOrderLineInput {
+  variantId: string;
+  quantity: number;
+  customAttributes?: { key: string; value: string }[];
+}
+
+/**
+ * Creates a new draft order on behalf of a customer — used by the storefront
+ * cart "Create draft order" button (via the App Proxy route). The customer is
+ * attached through `purchasingEntity`, so the draft inherits their name, email,
+ * and saved addresses. Prices come from the catalog (no client-supplied price).
+ *
+ * @param customerId - The customer's gid (e.g. "gid://shopify/Customer/123").
+ */
+export const createDraftOrder = async (
+  admin: AdminApiContext,
+  customerId: string,
+  lineItems: CreateDraftOrderLineInput[],
+): Promise<{
+  success: boolean;
+  name?: string;
+  invoiceUrl?: string;
+  error?: string;
+}> => {
+  if (lineItems.length === 0) {
+    return { success: false, error: "No line items provided" };
+  }
+
+  const input = {
+    purchasingEntity: { customerId },
+    lineItems: lineItems.map((item) => ({
+      variantId: item.variantId,
+      quantity: item.quantity,
+      ...(item.customAttributes && item.customAttributes.length > 0
+        ? {
+            customAttributes: item.customAttributes.filter(
+              (attr) => attr.key.trim() !== "",
+            ),
+          }
+        : {}),
+    })),
+  };
+
+  const response = await admin.graphql(CREATE_DRAFT_ORDER_MUTATION, {
+    variables: { input },
+  });
+
+  const { data } = await response.json();
+  const userErrors = data?.draftOrderCreate?.userErrors;
+  if (userErrors && userErrors.length > 0) {
+    return { success: false, error: userErrors[0].message };
+  }
+
+  const draftOrder = data?.draftOrderCreate?.draftOrder;
+  if (!draftOrder) {
+    return { success: false, error: "Draft order could not be created" };
+  }
+
+  return {
+    success: true,
+    name: draftOrder.name,
+    invoiceUrl: draftOrder.invoiceUrl ?? undefined,
+  };
+};
+
 // Fetches everything needed to safely apply a customer-driven edit in one
 // round trip: ownership (customer id), status, and each line item's variant
 // plus its product's other variants (for validating a variant switch and
@@ -852,7 +933,10 @@ export const updateCustomerDraftOrderLineItems = async (
           value: attr.value ?? "",
         }))
       )
-        .map((attr) => ({ key: attr.key.trim(), value: (attr.value ?? "").trim() }))
+        .map((attr) => ({
+          key: attr.key.trim(),
+          value: (attr.value ?? "").trim(),
+        }))
         .filter((attr) => attr.key !== ""),
     });
   }
