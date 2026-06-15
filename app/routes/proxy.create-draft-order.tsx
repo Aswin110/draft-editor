@@ -5,6 +5,11 @@ import {
   type CreateDraftOrderLineInput,
 } from "../models/draft-order.server";
 
+// This proxy endpoint only accepts POST. A GET (browser visit, health check)
+// would otherwise throw "no loader" — return a clean 405 instead.
+export const loader = () =>
+  new Response("Method Not Allowed", { status: 405 });
+
 interface CartItemPayload {
   variantId?: unknown;
   quantity?: unknown;
