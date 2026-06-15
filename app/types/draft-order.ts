@@ -63,14 +63,28 @@ export interface PageInfo {
   endCursor: string | null;
 }
 
+export interface CustomerVariantOption {
+  id: string;
+  title: string;
+  price: string;
+  availableForSale: boolean;
+  image: string | null;
+}
+
 export interface CustomerDraftLineItem {
   id: string;
+  variantId: string | null;
   title: string;
   variantTitle: string | null;
   quantity: number;
   image: string | null;
   unitPrice: string;
 }
+
+// Variant options for a single draft order, keyed by line item gid. Loaded
+// separately from the order list (getDraftOrderVariantOptions) to keep that
+// list query within Shopify's query cost limit.
+export type DraftOrderVariantOptions = Record<string, CustomerVariantOption[]>;
 
 export interface CustomerDraftOrder {
   id: string;

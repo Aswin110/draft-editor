@@ -10,7 +10,8 @@
   "viewItems": "View items",
   "makePayment": "Make payment",
   "quantityLabel": "Quantity",
-  "save": "Save changes",
+  "variantLabel": "Variant",
+  "save": "Update draft order",
   "saveError": "We couldn't save your changes. Please try again.",
   "qty": {
     "one": "Qty {{count}}",

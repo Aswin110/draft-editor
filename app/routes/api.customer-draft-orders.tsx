@@ -2,8 +2,9 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { authenticate, unauthenticated } from "../shopify.server";
 import {
   getCustomerDraftOrders,
+  getDraftOrderVariantOptions,
   getRecentDraftOrders,
-  updateCustomerDraftOrderQuantities,
+  updateCustomerDraftOrderLineItems,
 } from "../models/draft-order.server";
 
 // Outside production (i.e. `shopify app dev`), the extension preview has no
@@ -50,6 +51,31 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return cors(Response.json({ draftOrders: [] }));
   }
 
+  // When a `draftOrderId` is provided, return that order's per-line-item variant
+  // options instead of the order list. The extension loads these on demand (per
+  // order) so the list query stays within the query cost limit. Ownership is
+  // re-verified inside getDraftOrderVariantOptions.
+  const draftOrderId = new URL(request.url).searchParams.get("draftOrderId");
+  if (draftOrderId) {
+    try {
+      const { admin } = await unauthenticated.admin(shop);
+      const variantsByLineItem = await getDraftOrderVariantOptions(
+        admin,
+        customerId,
+        draftOrderId,
+      );
+      return cors(Response.json({ variantsByLineItem }));
+    } catch (error) {
+      console.error("customer-draft-orders variant options error:", error);
+      return cors(
+        Response.json(
+          { variantsByLineItem: {}, error: "Unable to load variants" },
+          { status: 500 },
+        ),
+      );
+    }
+  }
+
   try {
     const { admin } = await unauthenticated.admin(shop);
     const draftOrders = await getCustomerDraftOrders(admin, customerId);
@@ -65,16 +91,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 };
 
-interface UpdateQuantitiesBody {
+interface UpdateBody {
   draftOrderId?: unknown;
   quantities?: unknown;
+  variants?: unknown;
 }
 
 /**
- * Lets the logged-in customer change line item quantities on their own draft
- * order. Authenticated via the same customer-account session token as the
- * loader; ownership of the specific draft is re-verified server-side in
- * `updateCustomerDraftOrderQuantities`.
+ * Lets the logged-in customer change line item quantities and/or variants on
+ * their own draft order. Authenticated via the same customer-account session
+ * token as the loader; ownership of the specific draft is re-verified
+ * server-side in `updateCustomerDraftOrderLineItems`.
  */
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { sessionToken, cors } = await authenticate.public.customerAccount(
@@ -90,9 +117,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  let body: UpdateQuantitiesBody;
+  let body: UpdateBody;
   try {
-    body = (await request.json()) as UpdateQuantitiesBody;
+    body = (await request.json()) as UpdateBody;
   } catch {
     return cors(
       Response.json(
@@ -112,37 +139,67 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  // Validate and sanitize the quantities map: line item gid -> positive integer.
-  if (
-    typeof body.quantities !== "object" ||
-    body.quantities === null ||
-    Array.isArray(body.quantities)
-  ) {
-    return cors(
-      Response.json(
-        { success: false, error: "Missing quantities" },
-        { status: 400 },
-      ),
-    );
-  }
+  const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null && !Array.isArray(value);
 
+  // Validate and sanitize the quantities map: line item gid -> positive integer.
   const quantities: Record<string, number> = {};
-  for (const [lineItemId, value] of Object.entries(body.quantities)) {
-    if (!Number.isInteger(value) || (value as number) < 1) {
+  if (body.quantities !== undefined) {
+    if (!isPlainObject(body.quantities)) {
       return cors(
         Response.json(
-          { success: false, error: "Quantities must be whole numbers of 1 or more" },
+          { success: false, error: "Invalid quantities" },
           { status: 400 },
         ),
       );
     }
-    quantities[lineItemId] = value as number;
+    for (const [lineItemId, value] of Object.entries(body.quantities)) {
+      if (!Number.isInteger(value) || (value as number) < 1) {
+        return cors(
+          Response.json(
+            {
+              success: false,
+              error: "Quantities must be whole numbers of 1 or more",
+            },
+            { status: 400 },
+          ),
+        );
+      }
+      quantities[lineItemId] = value as number;
+    }
   }
 
-  if (Object.keys(quantities).length === 0) {
+  // Validate and sanitize the variants map: line item gid -> variant gid.
+  const variants: Record<string, string> = {};
+  if (body.variants !== undefined) {
+    if (!isPlainObject(body.variants)) {
+      return cors(
+        Response.json(
+          { success: false, error: "Invalid variants" },
+          { status: 400 },
+        ),
+      );
+    }
+    for (const [lineItemId, value] of Object.entries(body.variants)) {
+      if (typeof value !== "string" || !value) {
+        return cors(
+          Response.json(
+            { success: false, error: "Invalid variant id" },
+            { status: 400 },
+          ),
+        );
+      }
+      variants[lineItemId] = value;
+    }
+  }
+
+  if (
+    Object.keys(quantities).length === 0 &&
+    Object.keys(variants).length === 0
+  ) {
     return cors(
       Response.json(
-        { success: false, error: "No quantities to update" },
+        { success: false, error: "Nothing to update" },
         { status: 400 },
       ),
     );
@@ -150,11 +207,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try {
     const { admin } = await unauthenticated.admin(shop);
-    const result = await updateCustomerDraftOrderQuantities(
+    const result = await updateCustomerDraftOrderLineItems(
       admin,
       customerId,
       draftOrderId,
       quantities,
+      variants,
     );
     return cors(
       Response.json(result, { status: result.success ? 200 : 400 }),

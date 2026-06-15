@@ -2,6 +2,7 @@ import type {
   CustomerDraftOrder,
   DraftOrder,
   DraftOrderDetail,
+  DraftOrderVariantOptions,
   LineItem,
   PageInfo,
 } from "../types/draft-order";
@@ -192,6 +193,9 @@ const CUSTOMER_DRAFT_ORDER_FIELDS = `#graphql
               amount
             }
           }
+          variant {
+            id
+          }
         }
       }
     }
@@ -245,6 +249,7 @@ interface CustomerDraftOrderNode {
         variantTitle: string | null;
         image: { url: string } | null;
         originalUnitPriceSet: { shopMoney: { amount: string | null } };
+        variant: { id: string } | null;
       };
     }[];
   };
@@ -264,8 +269,12 @@ const mapCustomerDraftOrder = (
   invoiceUrl: node.invoiceUrl ?? null,
   totalPrice: node.totalPriceSet.shopMoney.amount || "0.00",
   currencyCode: node.totalPriceSet.shopMoney.currencyCode || "USD",
+  // Variant options are intentionally NOT included here — fetching them for
+  // every line item of every order in this list query blows past the query
+  // cost limit. They're loaded per-order on demand via getDraftOrderVariantOptions.
   lineItems: node.lineItems.edges.map((item) => ({
     id: item.node.id,
+    variantId: item.node.variant?.id ?? null,
     title: item.node.title,
     variantTitle: item.node.variantTitle ?? null,
     quantity: item.node.quantity,
@@ -301,7 +310,10 @@ export const getCustomerDraftOrders = async (
     data?: CustomerDraftOrdersResponse;
   };
 
-  return data?.draftOrders.edges.map((edge) => mapCustomerDraftOrder(edge.node)) || [];
+  return (
+    data?.draftOrders.edges.map((edge) => mapCustomerDraftOrder(edge.node)) ||
+    []
+  );
 };
 
 /**
@@ -325,7 +337,138 @@ export const getRecentDraftOrders = async (
     data?: CustomerDraftOrdersResponse;
   };
 
-  return data?.draftOrders.edges.map((edge) => mapCustomerDraftOrder(edge.node)) || [];
+  return (
+    data?.draftOrders.edges.map((edge) => mapCustomerDraftOrder(edge.node)) ||
+    []
+  );
+};
+
+// Variant options for a single draft order. Queried by draft order ID directly,
+// so there's no draftOrders -> lineItems -> variants multiplier and it stays
+// well within the query cost limit. That headroom lets us use the
+// non-deprecated `media` field and a generous variant page size.
+const DRAFT_ORDER_VARIANT_OPTIONS_QUERY = `#graphql
+  query getDraftOrderVariantOptions($id: ID!) {
+    draftOrder(id: $id) {
+      id
+      customer {
+        id
+      }
+      lineItems(first: 50) {
+        edges {
+          node {
+            id
+            variant {
+              id
+              product {
+                variants(first: 100) {
+                  edges {
+                    node {
+                      id
+                      title
+                      price
+                      availableForSale
+                      media(first: 1) {
+                        nodes {
+                          preview {
+                            image {
+                              url
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+interface VariantOptionsResponse {
+  draftOrder: {
+    id: string;
+    customer: { id: string } | null;
+    lineItems: {
+      edges: {
+        node: {
+          id: string;
+          variant: {
+            id: string;
+            product: {
+              variants: {
+                edges: {
+                  node: {
+                    id: string;
+                    title: string;
+                    price: string;
+                    availableForSale: boolean;
+                    media: {
+                      nodes: {
+                        preview: { image: { url: string } | null } | null;
+                      }[];
+                    };
+                  };
+                }[];
+              };
+            };
+          } | null;
+        };
+      }[];
+    };
+  } | null;
+}
+
+/**
+ * Fetches the selectable variant options for each line item of a single draft
+ * order, keyed by line item gid. Used by the customer account extension to
+ * populate the variant picker on demand (per order), so the order list query
+ * stays cheap.
+ *
+ * Re-verifies that the draft order belongs to `customerId` before returning
+ * anything. Line items whose product has only one variant are omitted (there's
+ * no choice to offer).
+ */
+export const getDraftOrderVariantOptions = async (
+  admin: AdminApiContext,
+  customerId: string,
+  draftOrderId: string,
+): Promise<DraftOrderVariantOptions> => {
+  const response = await admin.graphql(DRAFT_ORDER_VARIANT_OPTIONS_QUERY, {
+    variables: { id: draftOrderId },
+  });
+  const { data } = (await response.json()) as { data?: VariantOptionsResponse };
+
+  const draft = data?.draftOrder;
+  if (!draft) return {};
+
+  // Ownership check: never expose another customer's order contents.
+  const draftCustomerId = draft.customer ? numericId(draft.customer.id) : null;
+  if (!draftCustomerId || draftCustomerId !== numericId(customerId)) {
+    return {};
+  }
+
+  const result: DraftOrderVariantOptions = {};
+  for (const edge of draft.lineItems.edges) {
+    const node = edge.node;
+    const productVariants = node.variant?.product.variants.edges ?? [];
+    // Only expose options when there's a real choice to make.
+    if (productVariants.length <= 1) continue;
+
+    result[node.id] = productVariants.map((v) => ({
+      id: v.node.id,
+      title: v.node.title,
+      price: parseFloat(v.node.price || "0").toFixed(2),
+      availableForSale: v.node.availableForSale,
+      image: v.node.media.nodes[0]?.preview?.image?.url ?? null,
+    }));
+  }
+
+  return result;
 };
 
 export interface GetDraftOrdersOptions {
@@ -522,64 +665,119 @@ export const updateDraftOrderLineItems = async (
   return { success: true };
 };
 
-// Lightweight ownership/status check used before letting a customer edit their
-// own draft order from the customer account extension. Kept separate from the
-// full DRAFT_ORDER_QUERY so we don't have to touch the generated types.
-const DRAFT_ORDER_OWNER_QUERY = `#graphql
-  query getDraftOrderOwner($id: ID!) {
+// Fetches everything needed to safely apply a customer-driven edit in one
+// round trip: ownership (customer id), status, and each line item's variant
+// plus its product's other variants (for validating a variant switch and
+// looking up the authoritative price). Kept separate from DRAFT_ORDER_QUERY so
+// we don't have to touch the generated types.
+const CUSTOMER_DRAFT_UPDATE_QUERY = `#graphql
+  query getDraftOrderForCustomerUpdate($id: ID!) {
     draftOrder(id: $id) {
       id
       status
       customer {
         id
       }
+      lineItems(first: 50) {
+        edges {
+          node {
+            id
+            quantity
+            originalUnitPriceSet {
+              shopMoney {
+                amount
+                currencyCode
+              }
+            }
+            customAttributes {
+              key
+              value
+            }
+            variant {
+              id
+              product {
+                variants(first: 100) {
+                  edges {
+                    node {
+                      id
+                      price
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 `;
+
+interface DraftOrderForCustomerUpdate {
+  id: string;
+  status: string;
+  customer: { id: string } | null;
+  lineItems: {
+    edges: {
+      node: {
+        id: string;
+        quantity: number;
+        originalUnitPriceSet: {
+          shopMoney: { amount: string | null; currencyCode: string | null };
+        };
+        customAttributes: { key: string; value: string | null }[];
+        variant: {
+          id: string;
+          product: {
+            variants: { edges: { node: { id: string; price: string } }[] };
+          };
+        } | null;
+      };
+    }[];
+  };
+}
 
 const numericId = (gid: string): string | undefined =>
   gid.includes("/") ? gid.split("/").pop() : gid;
 
 /**
- * Updates the quantities of line items on a draft order on behalf of the
- * logged-in customer (customer account extension).
+ * Applies customer-driven edits (quantity and/or variant) to a draft order's
+ * line items on behalf of the logged-in customer (customer account extension).
  *
  * Security: this is a customer-facing write path, so it re-verifies that the
  * draft order actually belongs to `customerId` before making any change — the
  * caller only proves *who* the customer is (via the session token `sub`), not
  * that they own the draft. It also refuses completed drafts.
  *
- * The new line items are reconstructed from authoritative server-side data
- * (variant, price, custom attributes), with only the quantity taken from the
- * request — the client cannot tamper with prices or swap variants here.
+ * The new line items are reconstructed from authoritative server-side data; the
+ * client only chooses a quantity and a target variant. A variant switch is
+ * validated to belong to the same product, and its price is taken from the
+ * catalog — the client can never set an arbitrary price or swap in a different
+ * product.
  *
  * @param quantities - Map of line item gid -> new quantity (must be >= 1).
+ * @param variants - Map of line item gid -> target variant gid.
  */
-export const updateCustomerDraftOrderQuantities = async (
+export const updateCustomerDraftOrderLineItems = async (
   admin: AdminApiContext,
   customerId: string,
   draftOrderId: string,
   quantities: Record<string, number>,
+  variants: Record<string, string>,
 ): Promise<{ success: boolean; error?: string }> => {
-  // 1. Verify ownership + status.
-  const ownerResponse = await admin.graphql(DRAFT_ORDER_OWNER_QUERY, {
+  const response = await admin.graphql(CUSTOMER_DRAFT_UPDATE_QUERY, {
     variables: { id: draftOrderId },
   });
-  const ownerData = (await ownerResponse.json()) as {
-    data?: {
-      draftOrder?: {
-        id: string;
-        status: string;
-        customer: { id: string } | null;
-      } | null;
-    };
+  const { data } = (await response.json()) as {
+    data?: { draftOrder?: DraftOrderForCustomerUpdate | null };
   };
 
-  const draft = ownerData.data?.draftOrder;
+  const draft = data?.draftOrder;
   if (!draft) {
     return { success: false, error: "Draft order not found" };
   }
 
+  // Verify ownership + status.
   const draftCustomerId = draft.customer ? numericId(draft.customer.id) : null;
   if (!draftCustomerId || draftCustomerId !== numericId(customerId)) {
     return { success: false, error: "Not authorized" };
@@ -589,31 +787,55 @@ export const updateCustomerDraftOrderQuantities = async (
     return { success: false, error: "This order can no longer be edited" };
   }
 
-  // 2. Reconstruct the full line item set from authoritative data, applying
-  //    only the requested quantity changes.
-  const detail = await getDraftOrder(admin, draftOrderId);
-  if (!detail) {
-    return { success: false, error: "Draft order not found" };
-  }
+  const nodes = draft.lineItems.edges.map((edge) => edge.node);
 
   // draftOrderUpdate replaces the entire line item set, and
   // updateDraftOrderLineItems drops items without a variant. If this draft has
   // any custom (non-variant) line items, editing here would silently delete
   // them — refuse rather than lose data.
-  if (detail.lineItems.some((item) => item.variantId === null)) {
-    return {
-      success: false,
-      error: "This order can't be edited here",
-    };
+  if (nodes.some((node) => !node.variant)) {
+    return { success: false, error: "This order can't be edited here" };
   }
 
-  const lineItems: UpdateLineItemsInput[] = detail.lineItems.map((item) => ({
-    variantId: item.variantId,
-    quantity: quantities[item.id] ?? item.quantity,
-    originalUnitPrice: item.originalUnitPrice,
-    currencyCode: detail.currencyCode,
-    customAttributes: item.customAttributes,
-  }));
+  const currencyCode = (nodes[0]?.originalUnitPriceSet.shopMoney.currencyCode ||
+    "USD") as CurrencyCode;
+
+  // Reconstruct the full line item set from authoritative data, applying the
+  // requested quantity and variant changes.
+  const lineItems: UpdateLineItemsInput[] = [];
+  for (const node of nodes) {
+    const variant = node.variant!;
+    let variantId = variant.id;
+    // Preserve any existing (merchant-set) price when the variant is unchanged.
+    let unitPrice = parseFloat(
+      node.originalUnitPriceSet.shopMoney.amount || "0",
+    ).toFixed(2);
+
+    const requestedVariantId = variants[node.id];
+    if (requestedVariantId && requestedVariantId !== variant.id) {
+      // The target variant must belong to the same product, and its price is
+      // taken from the catalog rather than from the client.
+      const match = variant.product.variants.edges.find(
+        (edge) => edge.node.id === requestedVariantId,
+      );
+      if (!match) {
+        return { success: false, error: "Invalid variant selected" };
+      }
+      variantId = requestedVariantId;
+      unitPrice = parseFloat(match.node.price || "0").toFixed(2);
+    }
+
+    lineItems.push({
+      variantId,
+      quantity: quantities[node.id] ?? node.quantity,
+      originalUnitPrice: unitPrice,
+      currencyCode,
+      customAttributes: node.customAttributes.map((attr) => ({
+        key: attr.key,
+        value: attr.value ?? "",
+      })),
+    });
+  }
 
   return updateDraftOrderLineItems(admin, draftOrderId, lineItems);
 };
