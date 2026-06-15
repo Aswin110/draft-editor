@@ -9,6 +9,9 @@
   "colStatus": "Status",
   "viewItems": "View items",
   "makePayment": "Make payment",
+  "quantityLabel": "Quantity",
+  "save": "Save changes",
+  "saveError": "We couldn't save your changes. Please try again.",
   "qty": {
     "one": "Qty {{count}}",
     "other": "Qty {{count}}"

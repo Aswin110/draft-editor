@@ -180,6 +180,7 @@ const CUSTOMER_DRAFT_ORDER_FIELDS = `#graphql
     lineItems(first: 50) {
       edges {
         node {
+          id
           title
           quantity
           variantTitle
@@ -238,6 +239,7 @@ interface CustomerDraftOrderNode {
   lineItems: {
     edges: {
       node: {
+        id: string;
         title: string;
         quantity: number;
         variantTitle: string | null;
@@ -263,6 +265,7 @@ const mapCustomerDraftOrder = (
   totalPrice: node.totalPriceSet.shopMoney.amount || "0.00",
   currencyCode: node.totalPriceSet.shopMoney.currencyCode || "USD",
   lineItems: node.lineItems.edges.map((item) => ({
+    id: item.node.id,
     title: item.node.title,
     variantTitle: item.node.variantTitle ?? null,
     quantity: item.node.quantity,
@@ -517,4 +520,100 @@ export const updateDraftOrderLineItems = async (
   }
 
   return { success: true };
+};
+
+// Lightweight ownership/status check used before letting a customer edit their
+// own draft order from the customer account extension. Kept separate from the
+// full DRAFT_ORDER_QUERY so we don't have to touch the generated types.
+const DRAFT_ORDER_OWNER_QUERY = `#graphql
+  query getDraftOrderOwner($id: ID!) {
+    draftOrder(id: $id) {
+      id
+      status
+      customer {
+        id
+      }
+    }
+  }
+`;
+
+const numericId = (gid: string): string | undefined =>
+  gid.includes("/") ? gid.split("/").pop() : gid;
+
+/**
+ * Updates the quantities of line items on a draft order on behalf of the
+ * logged-in customer (customer account extension).
+ *
+ * Security: this is a customer-facing write path, so it re-verifies that the
+ * draft order actually belongs to `customerId` before making any change — the
+ * caller only proves *who* the customer is (via the session token `sub`), not
+ * that they own the draft. It also refuses completed drafts.
+ *
+ * The new line items are reconstructed from authoritative server-side data
+ * (variant, price, custom attributes), with only the quantity taken from the
+ * request — the client cannot tamper with prices or swap variants here.
+ *
+ * @param quantities - Map of line item gid -> new quantity (must be >= 1).
+ */
+export const updateCustomerDraftOrderQuantities = async (
+  admin: AdminApiContext,
+  customerId: string,
+  draftOrderId: string,
+  quantities: Record<string, number>,
+): Promise<{ success: boolean; error?: string }> => {
+  // 1. Verify ownership + status.
+  const ownerResponse = await admin.graphql(DRAFT_ORDER_OWNER_QUERY, {
+    variables: { id: draftOrderId },
+  });
+  const ownerData = (await ownerResponse.json()) as {
+    data?: {
+      draftOrder?: {
+        id: string;
+        status: string;
+        customer: { id: string } | null;
+      } | null;
+    };
+  };
+
+  const draft = ownerData.data?.draftOrder;
+  if (!draft) {
+    return { success: false, error: "Draft order not found" };
+  }
+
+  const draftCustomerId = draft.customer ? numericId(draft.customer.id) : null;
+  if (!draftCustomerId || draftCustomerId !== numericId(customerId)) {
+    return { success: false, error: "Not authorized" };
+  }
+
+  if (draft.status === "COMPLETED") {
+    return { success: false, error: "This order can no longer be edited" };
+  }
+
+  // 2. Reconstruct the full line item set from authoritative data, applying
+  //    only the requested quantity changes.
+  const detail = await getDraftOrder(admin, draftOrderId);
+  if (!detail) {
+    return { success: false, error: "Draft order not found" };
+  }
+
+  // draftOrderUpdate replaces the entire line item set, and
+  // updateDraftOrderLineItems drops items without a variant. If this draft has
+  // any custom (non-variant) line items, editing here would silently delete
+  // them — refuse rather than lose data.
+  if (detail.lineItems.some((item) => item.variantId === null)) {
+    return {
+      success: false,
+      error: "This order can't be edited here",
+    };
+  }
+
+  const lineItems: UpdateLineItemsInput[] = detail.lineItems.map((item) => ({
+    variantId: item.variantId,
+    quantity: quantities[item.id] ?? item.quantity,
+    originalUnitPrice: item.originalUnitPrice,
+    currencyCode: detail.currencyCode,
+    customAttributes: item.customAttributes,
+  }));
+
+  return updateDraftOrderLineItems(admin, draftOrderId, lineItems);
 };

@@ -64,6 +64,7 @@ export interface PageInfo {
 }
 
 export interface CustomerDraftLineItem {
+  id: string;
   title: string;
   variantTitle: string | null;
   quantity: number;

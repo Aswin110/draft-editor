@@ -1,11 +1,14 @@
 import "@shopify/ui-extensions/preact";
 import { render } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useCallback, useEffect, useState } from "preact/hooks";
 import {
   useI18n,
   useSessionToken,
 } from "@shopify/ui-extensions/customer-account/preact";
-import type { I18n } from "@shopify/ui-extensions/customer-account";
+import type {
+  I18n,
+  SessionToken,
+} from "@shopify/ui-extensions/customer-account";
 
 /**
  * Base URL of the app backend that serves draft orders. UI extensions run in a
@@ -34,6 +37,7 @@ const APP_URL =
 const ENDPOINT = `${APP_URL}/api/customer-draft-orders`;
 
 interface DraftLineItem {
+  id: string;
   title: string;
   variantTitle: string | null;
   quantity: number;
@@ -80,29 +84,27 @@ function Extension() {
   const [draftOrders, setDraftOrders] = useState<DraftOrder[] | null>(null);
   const [error, setError] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      try {
-        const token = await sessionToken.get();
-        const response = await fetch(ENDPOINT, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = (await response.json()) as { draftOrders: DraftOrder[] };
-        if (!cancelled) setDraftOrders(data.draftOrders ?? []);
-      } catch (e) {
-        console.error("Failed to load draft orders", e);
-        if (!cancelled) setError(true);
-      }
+  // Fetch (or re-fetch) the customer's draft orders. Re-fetching after a save
+  // lets the displayed totals reflect the new quantities.
+  const load = useCallback(async () => {
+    try {
+      const token = await sessionToken.get();
+      const response = await fetch(ENDPOINT, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = (await response.json()) as { draftOrders: DraftOrder[] };
+      setDraftOrders(data.draftOrders ?? []);
+      setError(false);
+    } catch (e) {
+      console.error("Failed to load draft orders", e);
+      setError(true);
     }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
   }, [sessionToken]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   // Loading state.
   if (draftOrders === null && !error) {
@@ -133,15 +135,93 @@ function Extension() {
       <s-paragraph color="subdued">{i18n.translate("description")}</s-paragraph>
       <s-stack direction="block" gap="base">
         {draftOrders.map((order) => (
-          <DraftOrderCard key={order.id} order={order} i18n={i18n} />
+          <DraftOrderCard
+            key={order.id}
+            order={order}
+            i18n={i18n}
+            sessionToken={sessionToken}
+            onSaved={load}
+          />
         ))}
       </s-stack>
     </s-section>
   );
 }
 
-function DraftOrderCard({ order, i18n }: { order: DraftOrder; i18n: I18n }) {
+function DraftOrderCard({
+  order,
+  i18n,
+  sessionToken,
+  onSaved,
+}: {
+  order: DraftOrder;
+  i18n: I18n;
+  sessionToken: SessionToken;
+  onSaved: () => Promise<void>;
+}) {
   const canPay = Boolean(order.invoiceUrl) && order.status !== "COMPLETED";
+  // Completed drafts are locked: the order has been placed, so quantities can
+  // no longer change. The server enforces this too.
+  const editable = order.status !== "COMPLETED";
+
+  const [quantities, setQuantities] = useState<Record<string, number>>(() =>
+    Object.fromEntries(order.lineItems.map((item) => [item.id, item.quantity])),
+  );
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+
+  // Re-sync local quantities whenever the order data changes (e.g. after a
+  // save-triggered reload), so the steppers reflect the freshly saved values.
+  useEffect(() => {
+    setQuantities(
+      Object.fromEntries(
+        order.lineItems.map((item) => [item.id, item.quantity]),
+      ),
+    );
+  }, [order.lineItems]);
+
+  const dirty = order.lineItems.some(
+    (item) => quantities[item.id] !== item.quantity,
+  );
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveError(false);
+    try {
+      // Only send the line items whose quantity actually changed.
+      const changed: Record<string, number> = {};
+      for (const item of order.lineItems) {
+        if (quantities[item.id] !== item.quantity) {
+          changed[item.id] = quantities[item.id];
+        }
+      }
+
+      const token = await sessionToken.get();
+      const response = await fetch(ENDPOINT, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ draftOrderId: order.id, quantities: changed }),
+      });
+      const result = (await response.json()) as {
+        success?: boolean;
+        error?: string;
+      };
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || `HTTP ${response.status}`);
+      }
+
+      // Reload from the server so totals reflect the new quantities.
+      await onSaved();
+    } catch (e) {
+      console.error("Failed to save quantities", e);
+      setSaveError(true);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <s-box padding="base" borderRadius="base" background="subdued">
@@ -164,9 +244,9 @@ function DraftOrderCard({ order, i18n }: { order: DraftOrder; i18n: I18n }) {
           <s-details>
             <s-summary>{i18n.translate("viewItems")}</s-summary>
             <s-stack direction="block" gap="small-300">
-              {order.lineItems.map((item, index) => (
+              {order.lineItems.map((item) => (
                 <s-stack
-                  key={index}
+                  key={item.id}
                   direction="inline"
                   gap="base"
                   alignItems="center"
@@ -185,14 +265,61 @@ function DraftOrderCard({ order, i18n }: { order: DraftOrder; i18n: I18n }) {
                         : item.title}
                     </s-text>
                     <s-text color="subdued">
-                      {i18n.translate("qty", { count: item.quantity })} ·{" "}
-                      {formatMoney(i18n, item.unitPrice, order.currencyCode)}
+                      {editable
+                        ? formatMoney(i18n, item.unitPrice, order.currencyCode)
+                        : `${i18n.translate("qty", {
+                            count: item.quantity,
+                          })} · ${formatMoney(
+                            i18n,
+                            item.unitPrice,
+                            order.currencyCode,
+                          )}`}
                     </s-text>
                   </s-stack>
+                  {editable && (
+                    <s-number-field
+                      label={i18n.translate("quantityLabel")}
+                      labelAccessibilityVisibility="exclusive"
+                      controls="stepper"
+                      min={1}
+                      value={String(quantities[item.id] ?? item.quantity)}
+                      disabled={saving}
+                      onChange={(event: Event) => {
+                        const target =
+                          event.currentTarget as HTMLInputElement | null;
+                        if (!target) return;
+                        const raw = target.value;
+                        const next = Number(raw);
+                        if (raw !== "" && Number.isFinite(next) && next >= 1) {
+                          setQuantities((current) => ({
+                            ...current,
+                            [item.id]: Math.floor(next),
+                          }));
+                        }
+                      }}
+                    ></s-number-field>
+                  )}
                 </s-stack>
               ))}
             </s-stack>
           </s-details>
+        )}
+
+        {editable && dirty && (
+          <s-stack direction="block" gap="small-300">
+            {saveError && (
+              <s-text tone="critical">{i18n.translate("saveError")}</s-text>
+            )}
+            <s-stack direction="inline" gap="base">
+              <s-button
+                variant="secondary"
+                onClick={handleSave}
+                loading={saving}
+              >
+                {i18n.translate("save")}
+              </s-button>
+            </s-stack>
+          </s-stack>
         )}
 
         {canPay && (
