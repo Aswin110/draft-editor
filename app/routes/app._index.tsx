@@ -10,6 +10,7 @@ import {
   extractNumericId,
 } from "../utils/formatters";
 import type { DraftOrder, PageInfo } from "../types/draft-order";
+import SetupGuide from "../components/SetupGuide";
 
 const ITEMS_PER_PAGE = 25;
 
@@ -17,10 +18,12 @@ interface LoaderData {
   draftOrders: DraftOrder[];
   pageInfo: PageInfo;
   searchQuery: string;
+  shopDomain: string;
+  apiKey: string;
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
 
   const url = new URL(request.url);
   const rawSearch = url.searchParams.get("search") || "";
@@ -45,15 +48,30 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const { draftOrders, pageInfo } = await getDraftOrders(admin, options);
 
-  return { draftOrders, pageInfo, searchQuery };
+  return {
+    draftOrders,
+    pageInfo,
+    searchQuery,
+    shopDomain: session.shop,
+    apiKey: process.env.SHOPIFY_API_KEY || "",
+  };
 };
 
 const DraftOrdersIndex = () => {
-  const { draftOrders, pageInfo, searchQuery } = useLoaderData<LoaderData>();
+  const { draftOrders, pageInfo, searchQuery, shopDomain, apiKey } =
+    useLoaderData<LoaderData>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [queryValue, setQueryValue] = useState(searchQuery);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // todo: do a better fix
+  //  The s-table pagination handlers are non-standard props on a web component,
+  // so React renders them as null during SSR but as functions on the client,
+  // tripping a hydration mismatch. Attach them only after mount so the first
+  // client render matches the server.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const handleQueryChange = useCallback(
     (e: Event) => {
@@ -116,6 +134,7 @@ const DraftOrdersIndex = () => {
   if (draftOrders.length === 0) {
     return (
       <s-page heading="Draft Orders">
+        {!searchQuery && <SetupGuide shopDomain={shopDomain} apiKey={apiKey} />}
         <s-section padding="none">
           <s-box padding="large-300">
             <s-stack alignItems="center" gap="base">
@@ -138,13 +157,14 @@ const DraftOrdersIndex = () => {
 
   return (
     <s-page heading="Draft Orders">
+      <SetupGuide shopDomain={shopDomain} apiKey={apiKey} />
       <s-section padding="none" accessibilityLabel="Draft orders table section">
         <s-table
           paginate
           hasNextPage={pageInfo.hasNextPage}
           hasPreviousPage={pageInfo.hasPreviousPage}
-          onNextPage={handleNextPage}
-          onPreviousPage={handlePreviousPage}
+          onNextPage={mounted ? handleNextPage : undefined}
+          onPreviousPage={mounted ? handlePreviousPage : undefined}
         >
           <s-text-field
             slot="filters"
