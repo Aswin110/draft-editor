@@ -26,14 +26,16 @@ model AdminStore {
 }
 
 model PropertyTemplate {
-  id         String   @id @default(cuid())
+  id         String         @id @default(cuid())
   shop       String
   name       String
-  properties Json     @default("[]")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  target     TemplateTarget @default(LINE_ITEM_PROPERTY)
+  properties Json           @default("[]")
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
 
   @@index([shop])
+  @@index([shop, target])
 }
 
 model Session {
@@ -56,3 +58,7 @@ model Session {
   refreshTokenExpires DateTime?
 }
 
+enum TemplateTarget {
+  LINE_ITEM_PROPERTY
+  CUSTOM_ATTRIBUTE
+}

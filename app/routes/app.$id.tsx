@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { SaveBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import {
@@ -134,6 +134,15 @@ const DraftOrderDetailPage = () => {
   const [note, setNote] = useState<string>(draftOrder.note || "");
   const [savedNote, setSavedNote] = useState<string>(draftOrder.note || "");
 
+  const lineItemTemplates = useMemo(
+    () => templates.filter((t) => t.target === "LINE_ITEM_PROPERTY"),
+    [templates],
+  );
+  const orderAttributeTemplates = useMemo(
+    () => templates.filter((t) => t.target === "CUSTOM_ATTRIBUTE"),
+    [templates],
+  );
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, {
@@ -163,7 +172,14 @@ const DraftOrderDetailPage = () => {
       isSavingRef.current = false;
       shopify.toast.show("Draft order updated");
     }
-  }, [fetcher.state, fetcher.data, lineItems, customAttributes, note, shopify]);
+  }, [
+    fetcher.state,
+    fetcher.data,
+    lineItems,
+    customAttributes,
+    note,
+    shopify,
+  ]);
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
@@ -271,7 +287,11 @@ const DraftOrderDetailPage = () => {
     setSavedCustomAttributes(draftOrder.customAttributes);
     setNote(draftOrder.note || "");
     setSavedNote(draftOrder.note || "");
-  }, [draftOrder.lineItems, draftOrder.customAttributes, draftOrder.note]);
+  }, [
+    draftOrder.lineItems,
+    draftOrder.customAttributes,
+    draftOrder.note,
+  ]);
 
   const handleRemoveItem = useCallback((itemId: string) => {
     setLineItems((prev) => prev.filter((item) => item.id !== itemId));
@@ -320,6 +340,7 @@ const DraftOrderDetailPage = () => {
           attributes={customAttributes}
           onChange={setCustomAttributes}
           readOnly={readOnly}
+          templates={orderAttributeTemplates}
         />
         <CustomerCard customer={draftOrder.customer} />
         <AddressCard
@@ -401,7 +422,7 @@ const DraftOrderDetailPage = () => {
                       item={item}
                       currencyCode={draftOrder.currencyCode}
                       readOnly={readOnly}
-                      templates={templates}
+                      templates={lineItemTemplates}
                       onRemove={() => handleRemoveItem(item.id)}
                       onQuantityChange={(qty) =>
                         handleQuantityChange(item.id, qty)

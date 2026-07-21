@@ -1,16 +1,22 @@
 import { useCallback } from "react";
-import type { CustomAttribute } from "../types/draft-order";
+import type { CustomAttribute, PropertyTemplate } from "../types/draft-order";
+import { AddPropertyModal } from "./AddPropertyModal";
+
+const MODAL_ID = "order-custom-attributes-modal";
 
 interface CustomAttributesCardProps {
   attributes: CustomAttribute[];
   onChange: (attributes: CustomAttribute[]) => void;
   readOnly?: boolean;
+  /** CUSTOM_ATTRIBUTE templates. */
+  templates?: PropertyTemplate[];
 }
 
 export const CustomAttributesCard = ({
   attributes,
   onChange,
   readOnly = false,
+  templates = [],
 }: CustomAttributesCardProps) => {
   const handleKeyChange = useCallback(
     (index: number, e: Event) => {
@@ -39,9 +45,12 @@ export const CustomAttributesCard = ({
     [attributes, onChange],
   );
 
-  const handleAdd = useCallback(() => {
-    onChange([...attributes, { key: "", value: "" }]);
-  }, [attributes, onChange]);
+  const handleAddFromModal = useCallback(
+    (added: CustomAttribute[]) => {
+      onChange([...attributes, ...added]);
+    },
+    [attributes, onChange],
+  );
 
   return (
     <s-section>
@@ -51,7 +60,8 @@ export const CustomAttributesCard = ({
           <s-button
             variant="tertiary"
             icon="plus"
-            onClick={handleAdd}
+            command="--show"
+            commandFor={MODAL_ID}
             accessibilityLabel="Add custom attribute"
           >
             Add
@@ -100,6 +110,15 @@ export const CustomAttributesCard = ({
             </s-grid>
           ))}
         </s-stack>
+      )}
+      {!readOnly && (
+        <AddPropertyModal
+          id={MODAL_ID}
+          templates={templates}
+          onAdd={handleAddFromModal}
+          heading="Add custom attributes"
+          emptyTemplatesMessage="No saved order attribute templates. Create some on the Property Templates page."
+        />
       )}
     </s-section>
   );

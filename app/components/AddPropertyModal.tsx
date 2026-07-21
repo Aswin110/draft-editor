@@ -1,11 +1,15 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { CustomAttribute, PropertyTemplate } from "../types/draft-order";
 import { PropertyRowsEditor } from "./PropertyRowsEditor";
+import { TemplateSearchList } from "./TemplateSearchList";
 
 interface AddPropertyModalProps {
   id: string;
+  /** Already filtered to the target this modal is adding to. */
   templates: PropertyTemplate[];
   onAdd: (properties: CustomAttribute[]) => void;
+  heading?: string;
+  emptyTemplatesMessage?: string;
 }
 
 const emptyRow = (): CustomAttribute => ({ key: "", value: "" });
@@ -14,13 +18,13 @@ export const AddPropertyModal = ({
   id,
   templates,
   onAdd,
+  heading = "Add properties",
+  emptyTemplatesMessage = "No saved templates. Create some on the Property Templates page.",
 }: AddPropertyModalProps) => {
   const modalRef = useRef<HTMLElement | null>(null);
-  const [search, setSearch] = useState("");
   const [rows, setRows] = useState<CustomAttribute[]>([emptyRow()]);
 
   const reset = useCallback(() => {
-    setSearch("");
     setRows([emptyRow()]);
   }, []);
 
@@ -31,16 +35,6 @@ export const AddPropertyModal = ({
     el.addEventListener("hide", reset);
     return () => el.removeEventListener("hide", reset);
   }, [reset]);
-
-  const matches = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return templates;
-    return templates.filter((t) => t.name.toLowerCase().includes(query));
-  }, [search, templates]);
-
-  const handleSearch = useCallback((e: Event) => {
-    setSearch((e.currentTarget as HTMLInputElement).value);
-  }, []);
 
   const handleApplyTemplate = useCallback((template: PropertyTemplate) => {
     const incoming = template.properties.map((p) => ({ ...p }));
@@ -65,63 +59,14 @@ export const AddPropertyModal = ({
         modalRef.current = el;
       }}
       id={id}
-      heading="Add properties"
+      heading={heading}
     >
       <s-stack direction="block" gap="base">
-        <s-stack direction="block" gap="small">
-          <s-text-field
-            label="Search templates"
-            labelAccessibilityVisibility="exclusive"
-            icon="search"
-            placeholder="Search property templates..."
-            value={search}
-            onInput={handleSearch}
-            autocomplete="off"
-          ></s-text-field>
-          {templates.length === 0 ? (
-            <s-text color="subdued">
-              No saved templates. Create some on the Property Templates page.
-            </s-text>
-          ) : matches.length === 0 ? (
-            <s-text color="subdued">No templates match your search.</s-text>
-          ) : (
-            <s-stack direction="block" gap="small">
-              {matches.map((template) => (
-                <s-box
-                  key={template.id}
-                  border="base"
-                  borderRadius="base"
-                  padding="small-300"
-                >
-                  <s-stack
-                    direction="inline"
-                    justifyContent="space-between"
-                    alignItems="center"
-                    gap="base"
-                  >
-                    <s-stack direction="block" gap="small-300">
-                      <s-text type="strong">{template.name}</s-text>
-                      <s-text color="subdued">
-                        {template.properties
-                          .map((p) => p.key)
-                          .filter(Boolean)
-                          .join(", ")}
-                      </s-text>
-                    </s-stack>
-                    <s-button
-                      variant="secondary"
-                      icon="plus"
-                      onClick={() => handleApplyTemplate(template)}
-                      accessibilityLabel={`Add ${template.name}`}
-                    >
-                      Add
-                    </s-button>
-                  </s-stack>
-                </s-box>
-              ))}
-            </s-stack>
-          )}
-        </s-stack>
+        <TemplateSearchList
+          templates={templates}
+          onApply={handleApplyTemplate}
+          emptyMessage={emptyTemplatesMessage}
+        />
 
         <s-divider></s-divider>
 

@@ -1,6 +1,13 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useFetcher, useNavigate } from "react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import {
@@ -9,7 +16,16 @@ import {
   updatePropertyTemplate,
   deletePropertyTemplate,
 } from "../models/property-template.server";
-import type { CustomAttribute, PropertyTemplate } from "../types/draft-order";
+import type {
+  CustomAttribute,
+  PropertyTemplate,
+  TemplateTarget,
+} from "../types/draft-order";
+import {
+  TEMPLATE_TARGETS,
+  TEMPLATE_TARGET_LABELS,
+  isTemplateTarget,
+} from "../types/draft-order";
 import { PropertyRowsEditor } from "../components/PropertyRowsEditor";
 
 const MODAL_ID = "property-template-modal";
@@ -36,28 +52,34 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const name = ((formData.get("name") as string) || "").trim();
-  const propertiesJson = (formData.get("properties") as string) || "[]";
+  const rawTarget = formData.get("target");
+  const rowsJson = (formData.get("rows") as string) || "[]";
 
   if (!name) {
     return { success: false, error: "Template name is required" };
   }
 
-  let properties: CustomAttribute[] = [];
+  if (!isTemplateTarget(rawTarget)) {
+    return { success: false, error: "Choose where the template applies" };
+  }
+  const target: TemplateTarget = rawTarget;
+
+  let rows: CustomAttribute[] = [];
   try {
-    properties = JSON.parse(propertiesJson);
+    rows = JSON.parse(rowsJson);
   } catch {
-    return { success: false, error: "Invalid properties" };
+    return { success: false, error: "Invalid template rows" };
   }
 
-  if (!properties.some((p) => (p.key || "").trim() !== "")) {
+  if (!rows.some((r) => (r.key || "").trim() !== "")) {
     return { success: false, error: "Add at least one property with a key" };
   }
 
   if (intent === "update") {
     const id = formData.get("id") as string;
-    await updatePropertyTemplate(session.shop, id, name, properties);
+    await updatePropertyTemplate(session.shop, id, name, target, rows);
   } else {
-    await createPropertyTemplate(session.shop, name, properties);
+    await createPropertyTemplate(session.shop, name, target, rows);
   }
 
   return { success: true };
@@ -66,14 +88,32 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 interface EditorState {
   id: string | null;
   name: string;
+  target: TemplateTarget;
   properties: CustomAttribute[];
 }
 
 const emptyEditor = (): EditorState => ({
   id: null,
   name: "",
+  target: "LINE_ITEM_PROPERTY",
   properties: [{ key: "", value: "" }],
 });
+
+/** Chip label per property: just the key, or `key: value` when a default is set. */
+const propertyLabels = (template: PropertyTemplate): string[] =>
+  template.properties
+    .filter((p) => p.key)
+    .map((p) => (p.value ? `${p.key}: ${p.value}` : p.key));
+
+/**
+ * s-stack has no wrap control, so a long property list would overflow its card.
+ * A plain flex container keeps the chips on as many lines as they need.
+ */
+const chipRowStyle = {
+  display: "flex",
+  flexWrap: "wrap" as const,
+  gap: "0.25rem",
+};
 
 const PropertyTemplatesPage = () => {
   const { templates } = useLoaderData<LoaderData>();
@@ -87,6 +127,15 @@ const PropertyTemplatesPage = () => {
   const pendingRef = useRef(false);
   const isSaving = fetcher.state !== "idle";
 
+  const grouped = useMemo(
+    () =>
+      TEMPLATE_TARGETS.map((target) => ({
+        target,
+        items: templates.filter((t) => t.target === target),
+      })).filter((group) => group.items.length > 0),
+    [templates],
+  );
+
   const hideModal = useCallback(() => {
     (
       modalRef.current as unknown as { hideOverlay?: () => void } | null
@@ -99,7 +148,7 @@ const PropertyTemplatesPage = () => {
       pendingRef.current = false;
       if (fetcher.data?.success) {
         hideModal();
-        shopify.toast.show("Property template saved");
+        shopify.toast.show("Template saved");
       } else if (fetcher.data?.error) {
         setError(fetcher.data.error);
       }
@@ -115,6 +164,7 @@ const PropertyTemplatesPage = () => {
     setEditor({
       id: template.id,
       name: template.name,
+      target: template.target,
       properties:
         template.properties.length > 0
           ? template.properties.map((p) => ({ ...p }))
@@ -128,6 +178,12 @@ const PropertyTemplatesPage = () => {
     setEditor((prev) => ({ ...prev, name: value }));
   }, []);
 
+  const handleTargetChange = useCallback((e: Event) => {
+    const value = (e.currentTarget as HTMLSelectElement).value;
+    if (!isTemplateTarget(value)) return;
+    setEditor((prev) => ({ ...prev, target: value }));
+  }, []);
+
   const handlePropertiesChange = useCallback((properties: CustomAttribute[]) => {
     setEditor((prev) => ({ ...prev, properties }));
   }, []);
@@ -137,16 +193,19 @@ const PropertyTemplatesPage = () => {
       setError("Template name is required");
       return;
     }
+
     if (!editor.properties.some((p) => p.key.trim() !== "")) {
       setError("Add at least one property with a key");
       return;
     }
+
     setError(null);
     const formData = new FormData();
     formData.append("intent", editor.id ? "update" : "create");
     if (editor.id) formData.append("id", editor.id);
     formData.append("name", editor.name);
-    formData.append("properties", JSON.stringify(editor.properties));
+    formData.append("target", editor.target);
+    formData.append("rows", JSON.stringify(editor.properties));
     pendingRef.current = true;
     fetcher.submit(formData, { method: "post" });
   }, [editor, fetcher]);
@@ -162,7 +221,7 @@ const PropertyTemplatesPage = () => {
   );
 
   return (
-    <s-page heading="Line Item Property Templates">
+    <s-page heading="Property Templates">
       <s-link slot="breadcrumb-actions" onClick={() => navigate("/app")}>
         Draft Orders
       </s-link>
@@ -176,15 +235,16 @@ const PropertyTemplatesPage = () => {
         Create template
       </s-button>
 
-      <s-section padding="none">
-        {templates.length === 0 ? (
+      {templates.length === 0 ? (
+        <s-section padding="none">
           <s-box padding="large-500">
             <s-stack direction="block" alignItems="center" gap="base">
               <s-icon type="catalog-product" tone="neutral"></s-icon>
-              <s-heading>No property templates yet</s-heading>
+              <s-heading>No templates yet</s-heading>
               <s-paragraph color="subdued">
-                Save groups of line item properties you reuse often, then add
-                them to any draft order with one click.
+                Save groups of line item properties or order custom attributes
+                you reuse often, then add them to any draft order with one
+                click.
               </s-paragraph>
               <s-button
                 variant="primary"
@@ -196,68 +256,71 @@ const PropertyTemplatesPage = () => {
               </s-button>
             </s-stack>
           </s-box>
-        ) : (
-          <s-stack direction="block" gap="base">
-            {templates.map((template) => (
-              <s-box
-                key={template.id}
-                border="base"
-                borderRadius="base"
-                padding="base"
-              >
-                <s-stack
-                  direction="inline"
-                  justifyContent="space-between"
-                  alignItems="start"
-                  gap="base"
-                >
-                  <s-stack direction="block" gap="small">
-                    <s-text type="strong">{template.name}</s-text>
-                    <s-stack direction="block" gap="small-300">
-                      {template.properties.map((prop, i) => (
-                        <s-text key={i} color="subdued">
-                          {prop.key}
-                          {prop.value ? `: ${prop.value}` : ""}
-                        </s-text>
-                      ))}
-                    </s-stack>
-                  </s-stack>
-                  <s-stack direction="inline" gap="small">
-                    <s-button
-                      variant="tertiary"
-                      icon="edit"
-                      command="--show"
-                      commandFor={MODAL_ID}
-                      onClick={() => startEdit(template)}
-                      accessibilityLabel={`Edit ${template.name}`}
-                    ></s-button>
-                    <s-button
-                      variant="tertiary"
-                      tone="critical"
-                      icon="delete"
-                      onClick={() => handleDelete(template.id)}
-                      accessibilityLabel={`Delete ${template.name}`}
-                    ></s-button>
-                  </s-stack>
-                </s-stack>
-              </s-box>
-            ))}
-          </s-stack>
-        )}
-      </s-section>
+        </s-section>
+      ) : (
+        grouped.map((group) => (
+          <s-section
+            key={group.target}
+            heading={TEMPLATE_TARGET_LABELS[group.target]}
+          >
+            <s-stack direction="block" gap="none">
+              {group.items.map((template, index) => (
+                <Fragment key={template.id}>
+                  {index > 0 && <s-divider></s-divider>}
+                  <s-box padding="base none">
+                    <s-grid
+                      gridTemplateColumns="1fr auto"
+                      gap="base"
+                      alignItems="center"
+                    >
+                      <s-stack direction="block" gap="small-300">
+                        <s-text type="strong">{template.name}</s-text>
+                        <div style={chipRowStyle}>
+                          {propertyLabels(template).map((label, i) => (
+                            <s-badge key={i} tone="neutral">
+                              {label}
+                            </s-badge>
+                          ))}
+                        </div>
+                      </s-stack>
+                      <s-stack direction="inline" gap="small-300">
+                        <s-button
+                          variant="tertiary"
+                          icon="edit"
+                          command="--show"
+                          commandFor={MODAL_ID}
+                          onClick={() => startEdit(template)}
+                          accessibilityLabel={`Edit ${template.name}`}
+                        ></s-button>
+                        <s-button
+                          variant="tertiary"
+                          tone="critical"
+                          icon="delete"
+                          onClick={() => handleDelete(template.id)}
+                          accessibilityLabel={`Delete ${template.name}`}
+                        ></s-button>
+                      </s-stack>
+                    </s-grid>
+                  </s-box>
+                </Fragment>
+              ))}
+            </s-stack>
+          </s-section>
+        ))
+      )}
 
       <s-modal
         ref={(el) => {
           modalRef.current = el;
         }}
         id={MODAL_ID}
-        heading={editor.id ? "Edit Template" : "Create New Template"}
+        heading={editor.id ? "Edit template" : "Create template"}
       >
-        <s-stack direction="block" gap="base">
+        <s-stack direction="block" gap="large">
           {error && <s-banner tone="critical">{error}</s-banner>}
 
           <s-text-field
-            label="Template Name"
+            label="Template name"
             value={editor.name}
             onInput={handleNameChange}
             placeholder="e.g. Engraving"
@@ -265,11 +328,30 @@ const PropertyTemplatesPage = () => {
             required
           ></s-text-field>
 
-          <PropertyRowsEditor
-            rows={editor.properties}
-            onChange={handlePropertiesChange}
-            addLabel="Add Property"
-          />
+          <s-select
+            label="Applies to"
+            details="Where this template can be added from."
+            value={editor.target}
+            onChange={handleTargetChange}
+          >
+            {TEMPLATE_TARGETS.map((target) => (
+              <s-option key={target} value={target}>
+                {TEMPLATE_TARGET_LABELS[target]}
+              </s-option>
+            ))}
+          </s-select>
+
+          <s-stack direction="block" gap="small">
+            <s-text type="strong">Properties</s-text>
+            <s-text color="subdued">
+              Leave a value blank to fill it in on the draft order.
+            </s-text>
+            <PropertyRowsEditor
+              rows={editor.properties}
+              onChange={handlePropertiesChange}
+              addLabel="Add property"
+            />
+          </s-stack>
         </s-stack>
 
         <s-button slot="secondary-actions" command="--hide" commandFor={MODAL_ID}>

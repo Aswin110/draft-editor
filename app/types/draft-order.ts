@@ -34,9 +34,30 @@ export interface CustomAttribute {
   value: string;
 }
 
+/**
+ * Where a template can be applied. Mirrors the TemplateTarget enum in
+ * schema.prisma — kept as a plain union here so client components can import it
+ * without pulling in the Prisma client.
+ */
+export type TemplateTarget = "LINE_ITEM_PROPERTY" | "CUSTOM_ATTRIBUTE";
+
+export const TEMPLATE_TARGETS: TemplateTarget[] = [
+  "LINE_ITEM_PROPERTY",
+  "CUSTOM_ATTRIBUTE",
+];
+
+export const TEMPLATE_TARGET_LABELS: Record<TemplateTarget, string> = {
+  LINE_ITEM_PROPERTY: "Line item properties",
+  CUSTOM_ATTRIBUTE: "Order custom attributes",
+};
+
+export const isTemplateTarget = (value: unknown): value is TemplateTarget =>
+  typeof value === "string" && (TEMPLATE_TARGETS as string[]).includes(value);
+
 export interface PropertyTemplate {
   id: string;
   name: string;
+  target: TemplateTarget;
   properties: CustomAttribute[];
 }
 
