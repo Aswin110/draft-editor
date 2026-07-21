@@ -8,11 +8,25 @@ import {
   formatCurrency,
   getStatusBadge,
   extractNumericId,
+  parseDraftOrderNumberSearch,
+  draftOrderNumberDigits,
 } from "../utils/formatters";
 import type { DraftOrder, PageInfo } from "../types/draft-order";
 import SetupGuide from "../components/SetupGuide";
 
 const ITEMS_PER_PAGE = 25;
+
+// Shopify search can't substring-match a draft order number, so number searches
+// fetch this many recent drafts and filter locally. Matches older than this
+// window won't surface (Shopify's max page size is 250).
+const NUMBER_SEARCH_FETCH_LIMIT = 250;
+
+const EMPTY_PAGE_INFO: PageInfo = {
+  hasNextPage: false,
+  hasPreviousPage: false,
+  startCursor: null,
+  endCursor: null,
+};
 
 interface LoaderData {
   draftOrders: DraftOrder[];
@@ -31,19 +45,43 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const cursor = url.searchParams.get("cursor") || null;
   const direction = url.searchParams.get("direction") || "next";
 
-  const formattedQuery = searchQuery || undefined;
+  const apiKey = process.env.SHOPIFY_API_KEY || "";
 
+  // Number searches ("2", "D2", "#D12") need substring matching on the draft
+  // order number, which Shopify's prefix-only search can't do. Fetch a recent
+  // window and filter locally so "2" surfaces both "#D2" and "#D12". Pagination
+  // is disabled in this mode — all matches within the window are shown.
+  const numberSearch = parseDraftOrderNumberSearch(searchQuery);
+  if (numberSearch) {
+    const { draftOrders } = await getDraftOrders(admin, {
+      first: NUMBER_SEARCH_FETCH_LIMIT,
+    });
+    const matches = draftOrders.filter((order) =>
+      draftOrderNumberDigits(order.name).includes(numberSearch),
+    );
+
+    return {
+      draftOrders: matches,
+      pageInfo: EMPTY_PAGE_INFO,
+      searchQuery,
+      shopDomain: session.shop,
+      apiKey,
+    };
+  }
+
+  // Default listing and text searches (customer name, email) use Shopify's
+  // server-side query with cursor pagination.
   const options =
     direction === "next"
       ? {
           first: ITEMS_PER_PAGE,
           after: cursor || undefined,
-          query: formattedQuery,
+          query: searchQuery || undefined,
         }
       : {
           last: ITEMS_PER_PAGE,
           before: cursor || undefined,
-          query: formattedQuery,
+          query: searchQuery || undefined,
         };
 
   const { draftOrders, pageInfo } = await getDraftOrders(admin, options);
@@ -53,7 +91,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     pageInfo,
     searchQuery,
     shopDomain: session.shop,
-    apiKey: process.env.SHOPIFY_API_KEY || "",
+    apiKey,
   };
 };
 
@@ -131,22 +169,18 @@ const DraftOrdersIndex = () => {
     navigate(`/app/${extractNumericId(draftOrderId)}`);
   };
 
-  if (draftOrders.length === 0) {
+  // Genuine empty state (no draft orders and no active search): show the
+  // setup guide and an empty message instead of the table.
+  if (draftOrders.length === 0 && !searchQuery) {
     return (
       <s-page heading="Draft Orders">
-        {!searchQuery && <SetupGuide shopDomain={shopDomain} apiKey={apiKey} />}
+        <SetupGuide shopDomain={shopDomain} apiKey={apiKey} />
         <s-section padding="none">
           <s-box padding="large-300">
             <s-stack alignItems="center" gap="base">
-              <s-heading>
-                {searchQuery
-                  ? "No draft orders found matching your search"
-                  : "No draft orders yet"}
-              </s-heading>
+              <s-heading>No draft orders yet</s-heading>
               <s-paragraph>
-                {searchQuery
-                  ? "Try changing your search terms"
-                  : "Draft orders will appear here once created"}
+                Draft orders will appear here once created
               </s-paragraph>
             </s-stack>
           </s-box>
@@ -166,15 +200,15 @@ const DraftOrdersIndex = () => {
           onNextPage={mounted ? handleNextPage : undefined}
           onPreviousPage={mounted ? handlePreviousPage : undefined}
         >
-          <s-text-field
+          <s-search-field
             slot="filters"
             label="Search draft orders"
             labelAccessibilityVisibility="exclusive"
-            icon="search"
             placeholder="Search draft orders..."
             value={queryValue}
             onInput={handleQueryChange}
-          ></s-text-field>
+            onChange={handleQueryChange}
+          ></s-search-field>
           <s-table-header-row>
             <s-table-header listSlot="primary">Draft Order</s-table-header>
             <s-table-header listSlot="secondary">Customer</s-table-header>
@@ -223,6 +257,14 @@ const DraftOrdersIndex = () => {
             })}
           </s-table-body>
         </s-table>
+        {draftOrders.length === 0 && (
+          <s-box padding="large-300">
+            <s-stack alignItems="center" gap="base">
+              <s-heading>No draft orders found matching your search</s-heading>
+              <s-paragraph>Try changing your search terms</s-paragraph>
+            </s-stack>
+          </s-box>
+        )}
       </s-section>
     </s-page>
   );

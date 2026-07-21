@@ -18,7 +18,10 @@ export const formatDateTime = (dateString: string): string => {
   });
 };
 
-export const formatCurrency = (amount: string, currencyCode: string): string => {
+export const formatCurrency = (
+  amount: string,
+  currencyCode: string,
+): string => {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: currencyCode,
@@ -52,6 +55,16 @@ export const formatAddressLines = (address: Address | null): string[] => {
 
   return lines.length > 0 ? lines : ["No address provided"];
 };
+
+export const parseDraftOrderNumberSearch = (
+  rawSearch: string,
+): string | null => {
+  const match = rawSearch.trim().match(/^#?[dD]?(\d+)$/);
+  return match ? match[1] : null;
+};
+
+export const draftOrderNumberDigits = (name: string): string =>
+  name.replace(/\D/g, "");
 
 export const extractNumericId = (gid: string): string => {
   return gid.split("/").pop() || "";
