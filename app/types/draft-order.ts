@@ -51,6 +51,13 @@ export const TEMPLATE_TARGET_LABELS: Record<TemplateTarget, string> = {
   CUSTOM_ATTRIBUTE: "Order custom attributes",
 };
 
+export const TEMPLATE_TARGET_DESCRIPTIONS: Record<TemplateTarget, string> = {
+  LINE_ITEM_PROPERTY:
+    "Added to a single product on a draft order — engraving, size, gift note.",
+  CUSTOM_ATTRIBUTE:
+    "Added to the draft order as a whole — PO number, delivery window, sales rep.",
+};
+
 export const isTemplateTarget = (value: unknown): value is TemplateTarget =>
   typeof value === "string" && (TEMPLATE_TARGETS as string[]).includes(value);
 
