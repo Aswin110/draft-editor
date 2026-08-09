@@ -66,6 +66,7 @@ const App = () => {
       <s-app-nav>
         <s-link href="/app">Draft Orders</s-link>
         <s-link href="/app/property-templates">Property Templates</s-link>
+        <s-link href="/app/integration">Integration</s-link>
       </s-app-nav>
       <Outlet />
     </AppProvider>
