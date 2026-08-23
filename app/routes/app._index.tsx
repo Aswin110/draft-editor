@@ -155,9 +155,13 @@ const DraftOrdersIndex = () => {
     }
   }, [pageInfo.startCursor, searchParams, queryValue, setSearchParams]);
 
-  const handleRowClick = (draftOrderId: string) => {
-    navigate(`/app/${extractNumericId(draftOrderId)}`);
-  };
+  const handleRowClick = useCallback(
+    (event: Event, draftOrderId: string) => {
+      event.preventDefault();
+      navigate(`/app/${extractNumericId(draftOrderId)}`);
+    },
+    [navigate],
+  );
 
   // Genuine empty state (no draft orders and no active search): show an empty
   // message instead of the table.
@@ -207,14 +211,17 @@ const DraftOrdersIndex = () => {
           <s-table-body>
             {draftOrders.map((draftOrder) => {
               const statusBadge = getStatusBadge(draftOrder.status);
-              const clickableId = `row-${extractNumericId(draftOrder.id)}`;
+              const numericId = extractNumericId(draftOrder.id);
+              const clickableId = `row-${numericId}`;
               return (
                 <s-table-row key={draftOrder.id} clickDelegate={clickableId}>
                   <s-table-cell>
                     <s-link
                       id={clickableId}
-                      href={`/app/${extractNumericId(draftOrder.id)}`}
-                      onClick={() => handleRowClick(draftOrder.id)}
+                      href={`/app/${numericId}`}
+                      onClick={(event: Event) =>
+                        handleRowClick(event, draftOrder.id)
+                      }
                     >
                       <s-text type="strong">{draftOrder.name}</s-text>
                     </s-link>
