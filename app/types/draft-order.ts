@@ -135,6 +135,6 @@ export interface CustomerDraftOrder {
 export type DraftOrderStatus = "OPEN" | "INVOICE_SENT" | "COMPLETED";
 
 export interface StatusBadgeConfig {
-  tone: "info" | "caution" | "success";
+  tone: "info" | "caution" | "success" | "critical" | "neutral";
   label: string;
 }
