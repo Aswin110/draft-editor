@@ -20,6 +20,7 @@ import { PaymentSummary } from "../components/PaymentSummary";
 import type { CustomAttribute, PropertyTemplate } from "../types/draft-order";
 import type { OrderDetail as OrderDetailType } from "../types/order";
 import { listPropertyTemplates } from "../models/property-template.server";
+import { useReviewPrompt } from "../hooks/useReviewPrompt";
 
 interface LoaderData {
   order: OrderDetailType;
@@ -76,6 +77,7 @@ const OrderDetailPage = () => {
   const navigate = useNavigate();
   const fetcher = useFetcher<{ success: boolean; error?: string }>();
   const shopify = useAppBridge();
+  const requestReview = useReviewPrompt();
 
   const [customAttributes, setCustomAttributes] = useState<CustomAttribute[]>(
     order.customAttributes,
@@ -103,8 +105,16 @@ const OrderDetailPage = () => {
       setSavedNote(note);
       isSavingRef.current = false;
       shopify.toast.show("Order updated");
+      void requestReview();
     }
-  }, [fetcher.state, fetcher.data, customAttributes, note, shopify]);
+  }, [
+    fetcher.state,
+    fetcher.data,
+    customAttributes,
+    note,
+    shopify,
+    requestReview,
+  ]);
 
   const handleSave = useCallback(() => {
     isSavingRef.current = true;

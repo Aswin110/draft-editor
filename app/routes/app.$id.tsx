@@ -40,6 +40,7 @@ import type {
   PropertyTemplate,
 } from "../types/draft-order";
 import { listPropertyTemplates } from "../models/property-template.server";
+import { useReviewPrompt } from "../hooks/useReviewPrompt";
 
 interface LoaderData {
   draftOrder: DraftOrderDetailType;
@@ -120,6 +121,7 @@ const DraftOrderDetailPage = () => {
   const navigate = useNavigate();
   const fetcher = useFetcher<{ success: boolean; error?: string }>();
   const shopify = useAppBridge();
+  const requestReview = useReviewPrompt();
 
   const [lineItems, setLineItems] = useState<LineItem[]>(draftOrder.lineItems);
   const [savedLineItems, setSavedLineItems] = useState<LineItem[]>(
@@ -171,6 +173,10 @@ const DraftOrderDetailPage = () => {
       setSavedNote(note);
       isSavingRef.current = false;
       shopify.toast.show("Draft order updated");
+      // Editing a draft order is the job merchants installed us for, so a save
+      // that worked is the one honest moment to ask how we're doing. The hook
+      // decides whether asking is appropriate; usually it stays quiet.
+      void requestReview();
     }
   }, [
     fetcher.state,
@@ -179,6 +185,7 @@ const DraftOrderDetailPage = () => {
     customAttributes,
     note,
     shopify,
+    requestReview,
   ]);
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
