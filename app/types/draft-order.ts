@@ -80,6 +80,8 @@ export interface DraftOrder {
 
 export interface DraftOrderDetail extends Omit<DraftOrder, "customer"> {
   customer: Customer | null;
+  /** The order this draft became, once completed. Null while it is still open. */
+  orderId: string | null;
   note: string | null;
   subtotalPrice: string;
   totalShippingPrice: string;

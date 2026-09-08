@@ -63,7 +63,14 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Draft order not found", { status: 404 });
   }
 
-  return { draftOrder, readOnly: false, templates };
+  // A completed draft has already been converted to an order, and Shopify
+  // refuses `draftOrderUpdate` on it. Lock the page rather than let a
+  // merchant type out an edit that can only fail on save.
+  return {
+    draftOrder,
+    readOnly: draftOrder.status === "COMPLETED",
+    templates,
+  };
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
@@ -337,6 +344,20 @@ const DraftOrderDetailPage = () => {
     window.open(`shopify://admin/draft_orders/${numericId}`, "_blank");
   }, [draftOrder.id]);
 
+  // Set only once the draft has been completed into an order, which is exactly
+  // when this page goes read only.
+  const orderNumericId = draftOrder.orderId
+    ? extractNumericId(draftOrder.orderId)
+    : null;
+
+  const handleOpenOrder = useCallback(
+    (event: Event) => {
+      event.preventDefault();
+      if (orderNumericId) navigate(`/app/orders/${orderNumericId}`);
+    },
+    [navigate, orderNumericId],
+  );
+
   const isSaving = fetcher.state === "submitting";
 
   return (
@@ -371,6 +392,25 @@ const DraftOrderDetailPage = () => {
       >
         Open in Shopify
       </s-button>
+
+      {readOnly && (
+        <s-section>
+          <s-banner tone="info" heading="This draft order is completed">
+            It has been converted to an order, and Shopify doesn&apos;t allow a
+            completed draft to be changed, so this page is read only. The note
+            and custom attributes can still be edited on the order it created.
+            {orderNumericId && (
+              <s-link
+                slot="primary-action"
+                href={`/app/orders/${orderNumericId}`}
+                onClick={handleOpenOrder}
+              >
+                View order
+              </s-link>
+            )}
+          </s-banner>
+        </s-section>
+      )}
 
       <SaveBar id="product-order-save-bar" open={hasChanges && !readOnly}>
         <button

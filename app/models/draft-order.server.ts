@@ -50,6 +50,9 @@ const DRAFT_ORDER_QUERY = `#graphql
       name
       createdAt
       status
+      order {
+        id
+      }
       note2
       customAttributes {
         key
@@ -579,6 +582,8 @@ export const getDraftOrder = async (
     name: draftOrder.name,
     createdAt: draftOrder.createdAt,
     status: draftOrder.status,
+    // Only set once the draft has been completed into a real order.
+    orderId: draftOrder.order?.id ?? null,
     note: draftOrder.note2 ?? null,
     subtotalPrice: draftOrder.subtotalPriceSet.shopMoney.amount || "0.00",
     totalShippingPrice:
