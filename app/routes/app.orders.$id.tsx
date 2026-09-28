@@ -145,7 +145,7 @@ const OrderDetailPage = () => {
 
   return (
     <s-page heading={order.name}>
-      <div slot="aside">
+      <s-stack slot="aside" direction="block" gap="base">
         <NotesCard note={note || null} onChange={setNote} />
         <CustomAttributesCard
           attributes={customAttributes}
@@ -161,7 +161,7 @@ const OrderDetailPage = () => {
           title="Billing address"
           addressLines={formatAddressLines(order.billingAddress)}
         />
-      </div>
+      </s-stack>
       <s-link slot="breadcrumb-actions" onClick={() => navigate("/app/orders")}>
         Orders
       </s-link>

@@ -362,7 +362,7 @@ const DraftOrderDetailPage = () => {
 
   return (
     <s-page heading={draftOrder.name}>
-      <div slot="aside">
+      <s-stack slot="aside" direction="block" gap="base">
         <NotesCard note={note || null} onChange={setNote} readOnly={readOnly} />
         <CustomAttributesCard
           attributes={customAttributes}
@@ -379,7 +379,7 @@ const DraftOrderDetailPage = () => {
           title="Billing address"
           addressLines={formatAddressLines(draftOrder.billingAddress)}
         />
-      </div>
+      </s-stack>
       <s-link slot="breadcrumb-actions" onClick={() => navigate("/app")}>
         Draft Orders
       </s-link>
