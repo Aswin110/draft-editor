@@ -3,6 +3,64 @@
 /* eslint-disable */
 import type * as AdminTypes from './admin.types.d.ts';
 
+export type CheckoutAddressFieldsFragment = Pick<AdminTypes.MailingAddress, 'firstName' | 'lastName' | 'name' | 'company' | 'address1' | 'address2' | 'city' | 'province' | 'provinceCode' | 'country' | 'countryCodeV2' | 'zip' | 'phone'>;
+
+export type GetAbandonedCheckoutsQueryVariables = AdminTypes.Exact<{
+  first?: AdminTypes.InputMaybe<AdminTypes.Scalars['Int']['input']>;
+  last?: AdminTypes.InputMaybe<AdminTypes.Scalars['Int']['input']>;
+  after?: AdminTypes.InputMaybe<AdminTypes.Scalars['String']['input']>;
+  before?: AdminTypes.InputMaybe<AdminTypes.Scalars['String']['input']>;
+  query?: AdminTypes.InputMaybe<AdminTypes.Scalars['String']['input']>;
+  reverse?: AdminTypes.InputMaybe<AdminTypes.Scalars['Boolean']['input']>;
+}>;
+
+
+export type GetAbandonedCheckoutsQuery = { abandonedCheckouts: { edges: Array<{ node: (
+        Pick<AdminTypes.AbandonedCheckout, 'id' | 'name' | 'createdAt' | 'completedAt'>
+        & { totalPriceSet: { shopMoney: Pick<AdminTypes.MoneyV2, 'amount' | 'currencyCode'> }, customer?: AdminTypes.Maybe<Pick<AdminTypes.Customer, 'displayName'>> }
+      ) }>, pageInfo: Pick<AdminTypes.PageInfo, 'hasNextPage' | 'hasPreviousPage' | 'startCursor' | 'endCursor'> } };
+
+export type GetAbandonedCheckoutQueryVariables = AdminTypes.Exact<{
+  id: AdminTypes.Scalars['ID']['input'];
+  lineItemLimit: AdminTypes.Scalars['Int']['input'];
+}>;
+
+
+export type GetAbandonedCheckoutQuery = { node?: AdminTypes.Maybe<(
+    Pick<AdminTypes.AbandonedCheckout, 'id' | 'name' | 'createdAt' | 'completedAt' | 'note' | 'discountCodes' | 'taxesIncluded'>
+    & { customAttributes: Array<Pick<AdminTypes.Attribute, 'key' | 'value'>>, customer?: AdminTypes.Maybe<(
+      Pick<AdminTypes.Customer, 'id' | 'displayName'>
+      & { defaultEmailAddress?: AdminTypes.Maybe<Pick<AdminTypes.CustomerEmailAddress, 'emailAddress'>> }
+    )>, shippingAddress?: AdminTypes.Maybe<Pick<AdminTypes.MailingAddress, 'firstName' | 'lastName' | 'name' | 'company' | 'address1' | 'address2' | 'city' | 'province' | 'provinceCode' | 'country' | 'countryCodeV2' | 'zip' | 'phone'>>, billingAddress?: AdminTypes.Maybe<Pick<AdminTypes.MailingAddress, 'firstName' | 'lastName' | 'name' | 'company' | 'address1' | 'address2' | 'city' | 'province' | 'provinceCode' | 'country' | 'countryCodeV2' | 'zip' | 'phone'>>, subtotalPriceSet: { shopMoney: Pick<AdminTypes.MoneyV2, 'amount' | 'currencyCode'> }, totalTaxSet?: AdminTypes.Maybe<{ shopMoney: Pick<AdminTypes.MoneyV2, 'amount'> }>, totalDutiesSet?: AdminTypes.Maybe<{ shopMoney: Pick<AdminTypes.MoneyV2, 'amount'> }>, totalPriceSet: { shopMoney: Pick<AdminTypes.MoneyV2, 'amount' | 'currencyCode'> }, lineItems: { pageInfo: Pick<AdminTypes.PageInfo, 'hasNextPage'>, edges: Array<{ node: (
+          Pick<AdminTypes.AbandonedCheckoutLineItem, 'id' | 'title' | 'variantTitle' | 'quantity' | 'sku'>
+          & { variant?: AdminTypes.Maybe<Pick<AdminTypes.ProductVariant, 'id'>>, image?: AdminTypes.Maybe<Pick<AdminTypes.Image, 'url'>>, originalUnitPriceSet: { shopMoney: Pick<AdminTypes.MoneyV2, 'amount' | 'currencyCode'> }, customAttributes: Array<Pick<AdminTypes.Attribute, 'key' | 'value'>> }
+        ) }> } }
+  )> };
+
+export type FindDraftOrderForCheckoutQueryVariables = AdminTypes.Exact<{
+  query: AdminTypes.Scalars['String']['input'];
+}>;
+
+
+export type FindDraftOrderForCheckoutQuery = { draftOrders: { edges: Array<{ node: Pick<AdminTypes.DraftOrder, 'id' | 'name'> }> } };
+
+export type CalculateCheckoutDraftOrderMutationVariables = AdminTypes.Exact<{
+  input: AdminTypes.DraftOrderInput;
+}>;
+
+
+export type CalculateCheckoutDraftOrderMutation = { draftOrderCalculate?: AdminTypes.Maybe<{ calculatedDraftOrder?: AdminTypes.Maybe<{ availableShippingRates: Array<(
+        Pick<AdminTypes.ShippingRate, 'handle' | 'title'>
+        & { price: Pick<AdminTypes.MoneyV2, 'amount' | 'currencyCode'> }
+      )> }>, userErrors: Array<Pick<AdminTypes.UserError, 'field' | 'message'>> }> };
+
+export type CreateDraftOrderFromCheckoutMutationVariables = AdminTypes.Exact<{
+  input: AdminTypes.DraftOrderInput;
+}>;
+
+
+export type CreateDraftOrderFromCheckoutMutation = { draftOrderCreate?: AdminTypes.Maybe<{ draftOrder?: AdminTypes.Maybe<Pick<AdminTypes.DraftOrder, 'id' | 'name'>>, userErrors: Array<Pick<AdminTypes.UserError, 'field' | 'message'>> }> };
+
 export type GetDraftOrdersQueryVariables = AdminTypes.Exact<{
   first?: AdminTypes.InputMaybe<AdminTypes.Scalars['Int']['input']>;
   last?: AdminTypes.InputMaybe<AdminTypes.Scalars['Int']['input']>;
@@ -166,6 +224,9 @@ export type OrderUpdateMutation = { orderUpdate?: AdminTypes.Maybe<{ order?: Adm
     )>, userErrors: Array<Pick<AdminTypes.UserError, 'field' | 'message'>> }> };
 
 interface GeneratedQueryTypes {
+  "#graphql\n  query getAbandonedCheckouts($first: Int, $last: Int, $after: String, $before: String, $query: String, $reverse: Boolean) {\n    abandonedCheckouts(first: $first, last: $last, after: $after, before: $before, query: $query, reverse: $reverse, sortKey: CREATED_AT) {\n      edges {\n        node {\n          id\n          name\n          createdAt\n          completedAt\n          totalPriceSet {\n            shopMoney {\n              amount\n              currencyCode\n            }\n          }\n          customer {\n            displayName\n          }\n        }\n      }\n      pageInfo {\n        hasNextPage\n        hasPreviousPage\n        startCursor\n        endCursor\n      }\n    }\n  }\n": {return: GetAbandonedCheckoutsQuery, variables: GetAbandonedCheckoutsQueryVariables},
+  "#graphql\n  query getAbandonedCheckout($id: ID!, $lineItemLimit: Int!) {\n    node(id: $id) {\n      ... on AbandonedCheckout {\n        id\n        name\n        createdAt\n        completedAt\n        note\n        discountCodes\n        taxesIncluded\n        customAttributes {\n          key\n          value\n        }\n        customer {\n          id\n          displayName\n          defaultEmailAddress {\n            emailAddress\n          }\n        }\n        shippingAddress {\n          ...CheckoutAddressFields\n        }\n        billingAddress {\n          ...CheckoutAddressFields\n        }\n        subtotalPriceSet {\n          shopMoney {\n            amount\n            currencyCode\n          }\n        }\n        totalTaxSet {\n          shopMoney {\n            amount\n          }\n        }\n        totalDutiesSet {\n          shopMoney {\n            amount\n          }\n        }\n        totalPriceSet {\n          shopMoney {\n            amount\n            currencyCode\n          }\n        }\n        lineItems(first: $lineItemLimit) {\n          pageInfo {\n            hasNextPage\n          }\n          edges {\n            node {\n              id\n              title\n              variantTitle\n              quantity\n              sku\n              variant {\n                id\n              }\n              image {\n                url\n              }\n              originalUnitPriceSet {\n                shopMoney {\n                  amount\n                  currencyCode\n                }\n              }\n              customAttributes {\n                key\n                value\n              }\n            }\n          }\n        }\n      }\n    }\n  }\n  #graphql\n  fragment CheckoutAddressFields on MailingAddress {\n    firstName\n    lastName\n    name\n    company\n    address1\n    address2\n    city\n    province\n    provinceCode\n    country\n    countryCodeV2\n    zip\n    phone\n  }\n\n": {return: GetAbandonedCheckoutQuery, variables: GetAbandonedCheckoutQueryVariables},
+  "#graphql\n  query findDraftOrderForCheckout($query: String!) {\n    draftOrders(first: 1, query: $query, reverse: true) {\n      edges {\n        node {\n          id\n          name\n        }\n      }\n    }\n  }\n": {return: FindDraftOrderForCheckoutQuery, variables: FindDraftOrderForCheckoutQueryVariables},
   "#graphql\n  query getDraftOrders($first: Int, $last: Int, $after: String, $before: String, $reverse: Boolean, $query: String) {\n    draftOrders(first: $first, last: $last, after: $after, before: $before, reverse: $reverse, query: $query) {\n      edges {\n        node {\n          id\n          name\n          createdAt\n          status\n          totalPriceSet {\n            shopMoney {\n              amount\n              currencyCode\n            }\n          }\n          customer {\n            displayName\n          }\n        }\n      }\n      pageInfo {\n        hasNextPage\n        hasPreviousPage\n        startCursor\n        endCursor\n      }\n    }\n  }\n": {return: GetDraftOrdersQuery, variables: GetDraftOrdersQueryVariables},
   "#graphql\n  query getDraftOrder($id: ID!) {\n    draftOrder(id: $id) {\n      id\n      name\n      createdAt\n      status\n      order {\n        id\n      }\n      note2\n      customAttributes {\n        key\n        value\n      }\n      subtotalPriceSet {\n        shopMoney {\n          amount\n          currencyCode\n        }\n      }\n      totalShippingPriceSet {\n        shopMoney {\n          amount\n        }\n      }\n      totalTaxSet {\n        shopMoney {\n          amount\n        }\n      }\n      totalPriceSet {\n        shopMoney {\n          amount\n          currencyCode\n        }\n      }\n      customer {\n        displayName\n        defaultEmailAddress {\n          emailAddress\n        }\n      }\n      shippingAddress {\n        name\n        address1\n        address2\n        city\n        province\n        country\n        zip\n        phone\n      }\n      billingAddress {\n        name\n        address1\n        address2\n        city\n        province\n        country\n        zip\n        phone\n      }\n      lineItems(first: 50) {\n        edges {\n          node {\n            id\n            title\n            quantity\n            sku\n            variantTitle\n            variant {\n              id\n            }\n            image {\n              url\n            }\n            originalUnitPriceSet {\n              shopMoney {\n                amount\n              }\n            }\n            customAttributes {\n              key\n              value\n            }\n          }\n        }\n      }\n    }\n  }\n": {return: GetDraftOrderQuery, variables: GetDraftOrderQueryVariables},
   "#graphql\n  query getCustomerDraftOrders($query: String!) {\n    draftOrders(first: 10, query: $query, sortKey: NUMBER, reverse: true) {\n      edges {\n        node {\n          ...CustomerDraftOrderFields\n        }\n      }\n    }\n  }\n  #graphql\n  fragment CustomerDraftOrderFields on DraftOrder {\n    id\n    name\n    createdAt\n    status\n    invoiceUrl\n    totalPriceSet {\n      shopMoney {\n        amount\n        currencyCode\n      }\n    }\n    lineItems(first: 50) {\n      edges {\n        node {\n          id\n          title\n          quantity\n          variantTitle\n          image {\n            url\n          }\n          originalUnitPriceSet {\n            shopMoney {\n              amount\n            }\n          }\n          variant {\n            id\n          }\n          customAttributes {\n            key\n            value\n          }\n        }\n      }\n    }\n  }\n\n": {return: GetCustomerDraftOrdersQuery, variables: GetCustomerDraftOrdersQueryVariables},
@@ -177,6 +238,8 @@ interface GeneratedQueryTypes {
 }
 
 interface GeneratedMutationTypes {
+  "#graphql\n  mutation calculateCheckoutDraftOrder($input: DraftOrderInput!) {\n    draftOrderCalculate(input: $input) {\n      calculatedDraftOrder {\n        availableShippingRates {\n          handle\n          title\n          price {\n            amount\n            currencyCode\n          }\n        }\n      }\n      userErrors {\n        field\n        message\n      }\n    }\n  }\n": {return: CalculateCheckoutDraftOrderMutation, variables: CalculateCheckoutDraftOrderMutationVariables},
+  "#graphql\n  mutation createDraftOrderFromCheckout($input: DraftOrderInput!) {\n    draftOrderCreate(input: $input) {\n      draftOrder {\n        id\n        name\n      }\n      userErrors {\n        field\n        message\n      }\n    }\n  }\n": {return: CreateDraftOrderFromCheckoutMutation, variables: CreateDraftOrderFromCheckoutMutationVariables},
   "#graphql\n  mutation draftOrderUpdate($id: ID!, $input: DraftOrderInput!) {\n    draftOrderUpdate(id: $id, input: $input) {\n      draftOrder {\n        id\n        note2\n        customAttributes {\n          key\n          value\n        }\n        lineItems(first: 50) {\n          edges {\n            node {\n              id\n              quantity\n              originalUnitPriceSet {\n                shopMoney {\n                  amount\n                }\n              }\n            }\n          }\n        }\n      }\n      userErrors {\n        field\n        message\n      }\n    }\n  }\n": {return: DraftOrderUpdateMutation, variables: DraftOrderUpdateMutationVariables},
   "#graphql\n  mutation draftOrderCreate($input: DraftOrderInput!) {\n    draftOrderCreate(input: $input) {\n      draftOrder {\n        id\n        name\n        invoiceUrl\n      }\n      userErrors {\n        field\n        message\n      }\n    }\n  }\n": {return: DraftOrderCreateMutation, variables: DraftOrderCreateMutationVariables},
   "#graphql\n  mutation orderUpdate($input: OrderInput!) {\n    orderUpdate(input: $input) {\n      order {\n        id\n        note\n        customAttributes {\n          key\n          value\n        }\n      }\n      userErrors {\n        field\n        message\n      }\n    }\n  }\n": {return: OrderUpdateMutation, variables: OrderUpdateMutationVariables},

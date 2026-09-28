@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 
 interface SetupGuideProps {
@@ -19,6 +20,7 @@ function StatusBadge({ status }: { status: ActivationStatus }) {
 
 const SetupGuide = ({ shopDomain, apiKey }: SetupGuideProps) => {
   const shopify = useAppBridge();
+  const navigate = useNavigate();
   const [cartStatus, setCartStatus] = useState<ActivationStatus>("unknown");
   const [orderStatus, setOrderStatus] = useState<ActivationStatus>("unknown");
 
@@ -68,7 +70,7 @@ const SetupGuide = ({ shopDomain, apiKey }: SetupGuideProps) => {
     <s-section heading="Finish setting up">
       <s-paragraph color="subdued">
         Add these to your storefront so customers can create and manage draft
-        orders.
+        orders, and recover checkouts they left behind.
       </s-paragraph>
 
       <s-stack direction="block" gap="base">
@@ -120,6 +122,29 @@ const SetupGuide = ({ shopDomain, apiKey }: SetupGuideProps) => {
                 onClick={openCustomerAccounts}
               >
                 Open account editor
+              </s-button>
+            </s-stack>
+          </s-stack>
+        </s-box>
+
+        <s-box padding="base" borderRadius="base" background="subdued">
+          <s-stack direction="block" gap="small-300">
+            <s-text type="strong">
+              3. Turn abandoned checkouts into draft orders
+            </s-text>
+            <s-text color="subdued">
+              Nothing to install. Open any abandoned checkout in Shopify and
+              choose Create draft order under More actions — items, customer,
+              addresses and shipping are copied for you. You can also do it
+              from the Abandoned Checkouts page here.
+            </s-text>
+            <s-stack direction="inline">
+              <s-button
+                variant="secondary"
+                accessibilityLabel="Open the abandoned checkouts page"
+                onClick={() => navigate("/app/abandoned-checkouts")}
+              >
+                View abandoned checkouts
               </s-button>
             </s-stack>
           </s-stack>

@@ -1,0 +1,13 @@
+api_version = "2026-04"
+
+[[extensions]]
+name = "t:name"
+handle = "abandoned-checkout-draft"
+uid = "f58cb7d0-3af6-68e8-0bd2-9f159120f1eb971788db"
+type = "ui_extension"
+
+  # Adds "Create draft order" to the More actions menu on abandoned checkout
+  # pages in the Shopify admin. Talks to /api/abandoned-checkout-draft.
+  [[extensions.targeting]]
+  target = "admin.abandoned-checkout-details.action.render"
+  module = "./src/ActionExtension.tsx"
