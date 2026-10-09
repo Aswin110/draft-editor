@@ -2,7 +2,10 @@ import { PassThrough } from "stream";
 import { renderToPipeableStream } from "react-dom/server";
 import { ServerRouter } from "react-router";
 import { createReadableStreamFromReadable } from "@react-router/node";
-import { type EntryContext } from "react-router";
+import {
+  type EntryContext,
+  type HandleDataRequestFunction,
+} from "react-router";
 import { isbot } from "isbot";
 import { addDocumentResponseHeaders } from "./shopify.server";
 
@@ -15,6 +18,10 @@ const handleRequest = async (
   reactRouterContext: EntryContext
 ) => {
   addDocumentResponseHeaders(request, responseHeaders);
+  // Every page is live Shopify data for one merchant. Nothing between this
+  // server and the admin iframe (browser cache, proxy, back/forward cache)
+  // may hand back an earlier copy of it.
+  responseHeaders.set("Cache-Control", "no-store");
   const userAgent = request.headers.get("user-agent");
   const callbackName = isbot(userAgent ?? '')
     ? "onAllReady"
@@ -56,3 +63,11 @@ const handleRequest = async (
   });
 };
 export default handleRequest;
+
+// Loader and action responses (`*.data`) carry the same data without the
+// HTML. The client fetches them on every navigation and revalidation, and
+// each one must come from Shopify, never from a cache.
+export const handleDataRequest: HandleDataRequestFunction = (response) => {
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+};

@@ -88,33 +88,50 @@ const OrderDetailPage = () => {
   const [note, setNote] = useState<string>(order.note || "");
   const [savedNote, setSavedNote] = useState<string>(order.note || "");
 
+  // Point both the working copy and the saved copy at the order as Shopify
+  // reports it. Everything that puts the page back in step with the server
+  // (a finished save, a discard, a reload of the loader) goes through here.
+  const resetTo = useCallback((source: OrderDetailType) => {
+    setCustomAttributes(source.customAttributes);
+    setSavedCustomAttributes(source.customAttributes);
+    setNote(source.note || "");
+    setSavedNote(source.note || "");
+  }, []);
+
   const hasAttributeChanges =
     JSON.stringify(customAttributes) !== JSON.stringify(savedCustomAttributes);
   const hasNoteChanges = note !== savedNote;
   const hasChanges = hasAttributeChanges || hasNoteChanges;
 
+  // The loader runs again after every save and whenever the merchant returns
+  // to this page (useRevalidateOnReturn in app.tsx). Each time it brings a new
+  // order, show it; unless the merchant is mid-edit, in which case their
+  // changes win and the next clean reload catches up.
+  const shownOrderRef = useRef(order);
+  useEffect(() => {
+    if (shownOrderRef.current === order || hasChanges) return;
+    shownOrderRef.current = order;
+    resetTo(order);
+  }, [order, hasChanges, resetTo]);
+
   const isSavingRef = useRef(false);
 
   useEffect(() => {
     if (
-      isSavingRef.current &&
-      fetcher.state === "idle" &&
-      fetcher.data?.success
+      !isSavingRef.current ||
+      fetcher.state !== "idle" ||
+      !fetcher.data?.success
     ) {
-      setSavedCustomAttributes([...customAttributes]);
-      setSavedNote(note);
-      isSavingRef.current = false;
-      shopify.toast.show("Order updated");
-      void requestReview();
+      return;
     }
-  }, [
-    fetcher.state,
-    fetcher.data,
-    customAttributes,
-    note,
-    shopify,
-    requestReview,
-  ]);
+    isSavingRef.current = false;
+    // React Router reloads the loader before the fetcher goes idle, so `order`
+    // is already the order as saved.
+    shownOrderRef.current = order;
+    resetTo(order);
+    shopify.toast.show("Order updated");
+    void requestReview();
+  }, [fetcher.state, fetcher.data, order, resetTo, shopify, requestReview]);
 
   const handleSave = useCallback(() => {
     isSavingRef.current = true;
@@ -125,11 +142,8 @@ const OrderDetailPage = () => {
   }, [customAttributes, note, fetcher]);
 
   const handleDiscard = useCallback(() => {
-    setCustomAttributes(order.customAttributes);
-    setSavedCustomAttributes(order.customAttributes);
-    setNote(order.note || "");
-    setSavedNote(order.note || "");
-  }, [order.customAttributes, order.note]);
+    resetTo(order);
+  }, [order, resetTo]);
 
   const handleOpenInShopify = useCallback(() => {
     const numericId = extractNumericId(order.id);

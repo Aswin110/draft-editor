@@ -1,10 +1,15 @@
-import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import type {
+  HeadersFunction,
+  LoaderFunctionArgs,
+  ShouldRevalidateFunction,
+} from "react-router";
 import { Outlet, useLoaderData, useRouteError } from "react-router";
 import { useEffect } from "react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
 import { authenticate } from "../shopify.server";
+import { useRevalidateOnReturn } from "../hooks/useRevalidateOnReturn";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
@@ -34,11 +39,28 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
 };
 
+// The shop's name and owner don't change while the app is open, so this
+// loader only needs to run again on a real navigation. Without this, every
+// save and every return-to-tab reload on a child page would also re-query
+// the shop.
+export const shouldRevalidate: ShouldRevalidateFunction = ({
+  currentUrl,
+  nextUrl,
+  defaultShouldRevalidate,
+}) => {
+  if (currentUrl.href === nextUrl.href) return false;
+  return defaultShouldRevalidate;
+};
+
 const CRISP_WEBSITE_ID = "36f18c89-59c6-466f-8523-fc8023bd3a7c";
 
 const App = () => {
   const { apiKey, shopName, ownerName, ownerEmail, shopDomain } =
     useLoaderData<typeof loader>();
+
+  // Whichever page is open, show what Shopify has now when the merchant
+  // comes back to it.
+  useRevalidateOnReturn();
 
   useEffect(() => {
     if (window.$crisp) return;

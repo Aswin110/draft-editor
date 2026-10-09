@@ -49,7 +49,9 @@ interface LoaderData {
 }
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
+  const startedAt = Date.now();
   const { admin, session } = await authenticate.admin(request);
+  const authenticatedAt = Date.now();
   const { id } = params;
 
   const draftOrderGid = buildShopifyGid("DraftOrder", id!);
@@ -58,6 +60,13 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     getDraftOrder(admin, draftOrderGid),
     listPropertyTemplates(session.shop),
   ]);
+
+  // Where a page load spends its time. Read these next to the action's line
+  // to see how long a save takes end to end.
+  console.info(
+    `[draft-order ${id}] loader: auth ${authenticatedAt - startedAt}ms, ` +
+      `load ${Date.now() - authenticatedAt}ms`,
+  );
 
   if (!draftOrder) {
     throw new Response("Draft order not found", { status: 404 });
@@ -74,7 +83,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
+  const startedAt = Date.now();
   const { admin } = await authenticate.admin(request);
+  const authenticatedAt = Date.now();
   const { id } = params;
 
   const draftOrderGid = buildShopifyGid("DraftOrder", id!);
@@ -114,13 +125,23 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         )
       : undefined;
 
-  return updateDraftOrderLineItems(
+  const result = await updateDraftOrderLineItems(
     admin,
     draftOrderGid,
     lineItems,
     customAttributes,
     note ?? undefined,
   );
+
+  // The Shopify mutation is the one part of a save we don't control; this
+  // line says whether it is the slow part.
+  console.info(
+    `[draft-order ${id}] action: auth ${authenticatedAt - startedAt}ms, ` +
+      `draftOrderUpdate ${Date.now() - authenticatedAt}ms ` +
+      `(${lineItems.length} line items, ${result.success ? "ok" : `error: ${result.error}`})`,
+  );
+
+  return result;
 };
 
 const DraftOrderDetailPage = () => {
@@ -142,6 +163,18 @@ const DraftOrderDetailPage = () => {
   >(draftOrder.customAttributes);
   const [note, setNote] = useState<string>(draftOrder.note || "");
   const [savedNote, setSavedNote] = useState<string>(draftOrder.note || "");
+
+  // Point both the working copy and the saved copy at a draft as Shopify
+  // reports it. Everything that puts the page back in step with the server
+  // (a finished save, a discard, a reload of the loader) goes through here.
+  const resetTo = useCallback((draft: DraftOrderDetailType) => {
+    setLineItems(draft.lineItems);
+    setSavedLineItems(draft.lineItems);
+    setCustomAttributes(draft.customAttributes);
+    setSavedCustomAttributes(draft.customAttributes);
+    setNote(draft.note || "");
+    setSavedNote(draft.note || "");
+  }, []);
 
   const lineItemTemplates = useMemo(
     () => templates.filter((t) => t.target === "LINE_ITEM_PROPERTY"),
@@ -167,33 +200,50 @@ const DraftOrderDetailPage = () => {
   const hasChanges =
     hasLineItemChanges || hasAttributeChanges || hasNoteChanges;
 
+  // The loader runs again after every save and whenever the merchant returns
+  // to this page (useRevalidateOnReturn in app.tsx). Each time it brings a new
+  // draft, show it; unless the merchant is mid-edit, in which case their
+  // changes win and the next clean reload catches up.
+  const shownDraftRef = useRef(draftOrder);
+  useEffect(() => {
+    if (shownDraftRef.current === draftOrder || hasChanges) return;
+    shownDraftRef.current = draftOrder;
+    resetTo(draftOrder);
+  }, [draftOrder, hasChanges, resetTo]);
+
   const isSavingRef = useRef(false);
+
+  // Shopify's own draft order page lags behind the API after an app updates a
+  // draft, sometimes by a minute, even on a fresh load. That is a Shopify-side
+  // bug (community.shopify.dev topic 17388, still open as of Oct 2026) and the
+  // one thing merchants reliably notice. Say so after every save, so a page
+  // that still shows the old draft isn't read as a save that failed.
+  const [showSavedNotice, setShowSavedNotice] = useState(false);
+  useEffect(() => {
+    if (hasChanges) setShowSavedNotice(false);
+  }, [hasChanges]);
 
   useEffect(() => {
     if (
-      isSavingRef.current &&
-      fetcher.state === "idle" &&
-      fetcher.data?.success
+      !isSavingRef.current ||
+      fetcher.state !== "idle" ||
+      !fetcher.data?.success
     ) {
-      setSavedLineItems([...lineItems]);
-      setSavedCustomAttributes([...customAttributes]);
-      setSavedNote(note);
-      isSavingRef.current = false;
-      shopify.toast.show("Draft order updated");
-      // Editing a draft order is the job merchants installed us for, so a save
-      // that worked is the one honest moment to ask how we're doing. The hook
-      // decides whether asking is appropriate; usually it stays quiet.
-      void requestReview();
+      return;
     }
-  }, [
-    fetcher.state,
-    fetcher.data,
-    lineItems,
-    customAttributes,
-    note,
-    shopify,
-    requestReview,
-  ]);
+    isSavingRef.current = false;
+    // React Router reloads the loader before the fetcher goes idle, so
+    // `draftOrder` is already the draft as saved: Shopify's own ids for any
+    // products that were added (not the placeholders from handleAddProducts)
+    // and totals that reflect the new quantities and prices.
+    shownDraftRef.current = draftOrder;
+    resetTo(draftOrder);
+    setShowSavedNotice(true);
+    // Editing a draft order is the job merchants installed us for, so a save
+    // that worked is the one honest moment to ask how we're doing. The hook
+    // decides whether asking is appropriate; usually it stays quiet.
+    void requestReview();
+  }, [fetcher.state, fetcher.data, draftOrder, resetTo, requestReview]);
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
@@ -295,17 +345,8 @@ const DraftOrderDetailPage = () => {
   }, [lineItems, customAttributes, note, fetcher, draftOrder.currencyCode]);
 
   const handleDiscard = useCallback(() => {
-    setLineItems(draftOrder.lineItems);
-    setSavedLineItems(draftOrder.lineItems);
-    setCustomAttributes(draftOrder.customAttributes);
-    setSavedCustomAttributes(draftOrder.customAttributes);
-    setNote(draftOrder.note || "");
-    setSavedNote(draftOrder.note || "");
-  }, [
-    draftOrder.lineItems,
-    draftOrder.customAttributes,
-    draftOrder.note,
-  ]);
+    resetTo(draftOrder);
+  }, [draftOrder, resetTo]);
 
   const handleRemoveItem = useCallback((itemId: string) => {
     setLineItems((prev) => prev.filter((item) => item.id !== itemId));
@@ -408,6 +449,25 @@ const DraftOrderDetailPage = () => {
                 View order
               </s-link>
             )}
+          </s-banner>
+        </s-section>
+      )}
+
+      {showSavedNotice && (
+        <s-section>
+          <s-banner
+            tone="success"
+            heading="Saved to Shopify"
+            dismissible
+            onDismiss={() => setShowSavedNotice(false)}
+          >
+            The draft order page in the Shopify admin can take about 15
+            seconds to show these changes, even after a refresh. That delay
+            is on Shopify&apos;s side. Until it catches up, don&apos;t save
+            the draft there, or it can write the old values back over this one.
+            <s-button slot="primary-action" onClick={handleOpenInShopify}>
+              Open in Shopify
+            </s-button>
           </s-banner>
         </s-section>
       )}
