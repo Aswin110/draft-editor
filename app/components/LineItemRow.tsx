@@ -1,5 +1,6 @@
 import type {
   LineItem,
+  LineItemDiscount,
   CustomAttribute,
   PropertyTemplate,
 } from "../types/draft-order";
@@ -15,8 +16,22 @@ export interface LineItemRowProps {
   onRemove: () => void;
   onQuantityChange: (quantity: number) => void;
   onPriceChange: (price: string) => void;
+  /** Drop the line's custom price and go back to the customer's catalog price. */
+  onUseCatalogPrice: () => void;
+  /** True while Shopify is being asked what this customer pays for the line. */
+  pricePending?: boolean;
   onPropertiesChange: (properties: CustomAttribute[]) => void;
 }
+
+const discountLabel = (
+  discount: LineItemDiscount,
+  currencyCode: string,
+): string => {
+  const name = discount.title || "Discount";
+  return discount.valueType === "PERCENTAGE"
+    ? `${name} −${discount.value}%`
+    : `${name} −${currencyCode} ${discount.amount}`;
+};
 
 export const LineItemRow = ({
   item,
@@ -26,11 +41,18 @@ export const LineItemRow = ({
   onRemove,
   onQuantityChange,
   onPriceChange,
+  onUseCatalogPrice,
+  pricePending = false,
   onPropertiesChange,
 }: LineItemRowProps) => {
-  const totalAmount = (
-    parseFloat(item.originalUnitPrice || "0") * item.quantity
-  ).toFixed(2);
+  // The row total is what the customer pays: after the line discount, if any.
+  const unitPaid = item.appliedDiscount
+    ? item.discountedUnitPrice
+    : item.originalUnitPrice;
+  const totalAmount = (parseFloat(unitPaid || "0") * item.quantity).toFixed(2);
+  const hasCustomPrice = item.priceOverride !== null;
+  const showPricingNotes =
+    pricePending || item.appliedDiscount !== null || hasCustomPrice;
 
   const {
     attributes,
@@ -181,6 +203,28 @@ export const LineItemRow = ({
             </s-stack>
           </s-box>
         </s-stack>
+        {showPricingNotes && (
+          <s-box paddingInlineStart="large-500">
+            <s-stack direction="inline" gap="base" alignItems="center">
+              {pricePending && (
+                <s-text color="subdued">Checking the customer&apos;s price…</s-text>
+              )}
+              {item.appliedDiscount && (
+                <s-text color="subdued">
+                  {discountLabel(item.appliedDiscount, currencyCode)}:{" "}
+                  {currencyCode}{" "}
+                  {item.discountedUnitPrice} each
+                </s-text>
+              )}
+              {hasCustomPrice && <s-badge tone="info">Custom price</s-badge>}
+              {hasCustomPrice && !readOnly && (
+                <s-button variant="tertiary" onClick={onUseCatalogPrice}>
+                  Use catalog price
+                </s-button>
+              )}
+            </s-stack>
+          </s-box>
+        )}
         <s-box paddingInlineStart="large-500">
           <LineItemProperties
             properties={item.customAttributes}

@@ -17,16 +17,59 @@ export interface Customer extends CustomerSummary {
   email: string | null;
 }
 
+export type DiscountValueType = "PERCENTAGE" | "FIXED_AMOUNT";
+
+/**
+ * A discount the merchant applied to one line (Shopify's line-level
+ * `appliedDiscount`). Read from the draft and sent back unchanged on save, so
+ * a wholesale markdown entered in the Shopify admin survives an edit here.
+ */
+export interface LineItemDiscount {
+  title: string | null;
+  description: string | null;
+  /** Percentage (0-100) for PERCENTAGE, otherwise an amount in shop currency. */
+  value: number;
+  valueType: DiscountValueType;
+  /** Total discount on the line as Shopify last calculated it. */
+  amount: string;
+}
+
 export interface LineItem {
   id: string;
   variantId: string | null;
   title: string;
   quantity: number;
+  /**
+   * The unit price before line discounts, as Shopify reports it. For a B2B
+   * draft this is the company's catalog price, not the retail price.
+   */
   originalUnitPrice: string;
+  /**
+   * A custom price pinned on this line. Null means Shopify prices the line
+   * from the customer's catalog (price lists, B2B catalogs) and keeps doing so
+   * if that catalog changes. Set when the merchant types a price here or set
+   * one in the Shopify admin.
+   */
+  priceOverride: string | null;
+  appliedDiscount: LineItemDiscount | null;
+  /** Unit price after the line discount; equals originalUnitPrice without one. */
+  discountedUnitPrice: string;
   image: string | null;
   sku: string | null;
   variantTitle: string | null;
   customAttributes: CustomAttribute[];
+}
+
+/**
+ * The B2B company a draft is for. Shopify prices such a draft from the
+ * company location's catalog, so we show it and send it back on any create.
+ */
+export interface PurchasingCompanyRef {
+  companyId: string;
+  companyLocationId: string;
+  companyContactId: string;
+  companyName: string;
+  locationName: string | null;
 }
 
 export interface CustomAttribute {
@@ -80,6 +123,8 @@ export interface DraftOrder {
 
 export interface DraftOrderDetail extends Omit<DraftOrder, "customer"> {
   customer: Customer | null;
+  /** Set when the draft belongs to a B2B company location. */
+  purchasingCompany: PurchasingCompanyRef | null;
   /** The order this draft became, once completed. Null while it is still open. */
   orderId: string | null;
   note: string | null;

@@ -1,4 +1,5 @@
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
+import { resolvePurchasingEntity } from "./draft-order.server";
 import type { Address, CustomAttribute, PageInfo } from "../types/draft-order";
 import type {
   AbandonedCheckout,
@@ -600,6 +601,10 @@ const buildDraftOrderInput = (
   };
 
   if (checkout.customer?.id) {
+    // Replaced by the resolved purchasing entity in
+    // convertAbandonedCheckoutToDraftOrder: a B2B contact's checkout was
+    // priced from their company location's catalog, and the draft only gets
+    // the same prices if it names that location.
     input.purchasingEntity = { customerId: checkout.customer.id };
   } else {
     warnings.push(
@@ -762,6 +767,12 @@ export const convertAbandonedCheckoutToDraftOrder = async (
       error: "This checkout has no items to copy.",
       warnings,
     };
+  }
+
+  if (checkout.customer?.id) {
+    const resolved = await resolvePurchasingEntity(admin, checkout.customer.id);
+    input.purchasingEntity = resolved.purchasingEntity;
+    if (resolved.warning) warnings.push(resolved.warning);
   }
 
   await addShippingLine(admin, checkout, input, warnings);

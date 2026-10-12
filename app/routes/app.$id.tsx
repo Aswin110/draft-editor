@@ -4,8 +4,11 @@ import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { SaveBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import {
+  calculateLineItemPrices,
   getDraftOrder,
   updateDraftOrderLineItems,
+  type CalculatedLinePrice,
+  type UpdateLineItemsInput,
 } from "../models/draft-order.server";
 import {
   formatAddressLines,
@@ -36,6 +39,7 @@ import {
 import type {
   DraftOrderDetail as DraftOrderDetailType,
   LineItem,
+  LineItemDiscount,
   CustomAttribute,
   PropertyTemplate,
 } from "../types/draft-order";
@@ -82,7 +86,33 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   };
 };
 
-export const action = async ({ request, params }: ActionFunctionArgs) => {
+interface SaveResult {
+  intent?: "save";
+  success: boolean;
+  error?: string;
+}
+
+interface CalculateResult {
+  intent: "calculate";
+  success: boolean;
+  /** Row ids the prices were requested for, in request order. */
+  keys: string[];
+  prices: CalculatedLinePrice[];
+}
+
+/** What the editor posts per row on save. */
+interface LineItemPayload {
+  variantId: string | null;
+  quantity: number;
+  priceOverride: string | null;
+  appliedDiscount: LineItemDiscount | null;
+  customAttributes?: { key: string; value: string }[];
+}
+
+export const action = async ({
+  request,
+  params,
+}: ActionFunctionArgs): Promise<SaveResult | CalculateResult> => {
   const startedAt = Date.now();
   const { admin } = await authenticate.admin(request);
   const authenticatedAt = Date.now();
@@ -91,32 +121,54 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   const draftOrderGid = buildShopifyGid("DraftOrder", id!);
 
   const formData = await request.formData();
+  const intent = (formData.get("intent") as string | null) ?? "save";
   const lineItemsJson = formData.get("lineItems") as string;
-  const currencyCode = formData.get("currencyCode") as string;
-  const customAttributesJson = formData.get("customAttributes") as string;
-  const note = formData.get("note") as string | null;
+  const currencyCode = (formData.get("currencyCode") as string) || "USD";
 
   if (!lineItemsJson) {
     return { success: false, error: "No line items provided" };
   }
 
-  const lineItems: {
-    variantId: string | null;
-    quantity: number;
-    originalUnitPrice: string;
-    currencyCode: string;
-    customAttributes?: { key: string; value: string }[];
-  }[] = JSON.parse(lineItemsJson).map(
-    (item: {
-      variantId: string | null;
-      quantity: number;
-      originalUnitPrice: string;
-      customAttributes?: { key: string; value: string }[];
-    }) => ({
-      ...item,
-      currencyCode: currencyCode || "USD",
-    }),
-  );
+  if (intent === "calculate") {
+    // Price preview for rows just added from the picker (which only knows
+    // retail prices) or reset to the catalog price. Nothing is saved.
+    const requests: { key: string; variantId: string | null; quantity: number }[] =
+      JSON.parse(lineItemsJson);
+    const keys = requests.map((item) => item.key);
+    try {
+      const prices = await calculateLineItemPrices(
+        admin,
+        draftOrderGid,
+        requests.map((item) => ({
+          variantId: item.variantId,
+          quantity: item.quantity,
+          priceOverride: null,
+          currencyCode,
+        })),
+      );
+      return { intent: "calculate", success: true, keys, prices };
+    } catch (error) {
+      // The rows keep the picker's price; Shopify prices them on save anyway.
+      console.warn(`[draft-order ${id}] price calculation failed:`, error);
+      return { intent: "calculate", success: false, keys, prices: [] };
+    }
+  }
+
+  const customAttributesJson = formData.get("customAttributes") as string;
+  const note = formData.get("note") as string | null;
+
+  const lineItems: UpdateLineItemsInput[] = (
+    JSON.parse(lineItemsJson) as LineItemPayload[]
+  ).map((item) => ({
+    variantId: item.variantId ?? null,
+    quantity: item.quantity,
+    // Null unless the merchant priced this line (here or in the Shopify
+    // admin), so Shopify keeps pricing the rest from the customer's catalog.
+    priceOverride: item.priceOverride ?? null,
+    appliedDiscount: item.appliedDiscount ?? null,
+    customAttributes: item.customAttributes,
+    currencyCode,
+  }));
 
   const customAttributes: { key: string; value: string }[] =
     customAttributesJson
@@ -144,10 +196,29 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   return result;
 };
 
+/**
+ * Unit price after the line's discount, for a price the merchant just typed.
+ * Shopify recalculates on save; this keeps the row total honest until then.
+ */
+const discountedUnitFor = (item: LineItem, newPrice: string): string => {
+  const unit = parseFloat(newPrice || "0");
+  if (!item.appliedDiscount) return unit.toFixed(2);
+  if (item.appliedDiscount.valueType === "PERCENTAGE") {
+    return (unit * (1 - item.appliedDiscount.value / 100)).toFixed(2);
+  }
+  // Fixed amount: keep the same per-unit discount Shopify last applied.
+  const perUnit =
+    parseFloat(item.originalUnitPrice || "0") -
+    parseFloat(item.discountedUnitPrice || "0");
+  return Math.max(unit - perUnit, 0).toFixed(2);
+};
+
 const DraftOrderDetailPage = () => {
   const { draftOrder, readOnly, templates } = useLoaderData<LoaderData>();
   const navigate = useNavigate();
-  const fetcher = useFetcher<{ success: boolean; error?: string }>();
+  const fetcher = useFetcher<SaveResult>();
+  // Separate fetcher for price previews, so a save and a preview never race.
+  const priceFetcher = useFetcher<CalculateResult>();
   const shopify = useAppBridge();
   const requestReview = useReviewPrompt();
 
@@ -245,6 +316,77 @@ const DraftOrderDetailPage = () => {
     void requestReview();
   }, [fetcher.state, fetcher.data, draftOrder, resetTo, requestReview]);
 
+  // Rows waiting for Shopify to say what this customer pays for them.
+  const [pendingPriceIds, setPendingPriceIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  const requestPrices = useCallback(
+    (items: LineItem[]) => {
+      const requests = items
+        .filter((item) => item.variantId)
+        .map((item) => ({
+          key: item.id,
+          variantId: item.variantId,
+          quantity: item.quantity,
+        }));
+      if (requests.length === 0) return;
+      setPendingPriceIds(
+        (prev) => new Set([...prev, ...requests.map((r) => r.key)]),
+      );
+      const formData = new FormData();
+      formData.append("intent", "calculate");
+      formData.append("lineItems", JSON.stringify(requests));
+      formData.append("currencyCode", draftOrder.currencyCode);
+      priceFetcher.submit(formData, { method: "POST" });
+    },
+    [priceFetcher, draftOrder.currencyCode],
+  );
+
+  // Apply a finished price preview to the rows it was for. Shopify returns
+  // the lines in request order, so match each requested row to the next
+  // result with its variant. A row the merchant priced meanwhile is left
+  // alone. Whatever a preview didn't cover (a superseded request, a failure)
+  // simply keeps the picker's price; Shopify prices it on save regardless.
+  const appliedPreviewRef = useRef<CalculateResult | null>(null);
+  useEffect(() => {
+    if (priceFetcher.state !== "idle") return;
+    const data = priceFetcher.data;
+    if (data && data !== appliedPreviewRef.current) {
+      appliedPreviewRef.current = data;
+      if (data.success) {
+        setLineItems((prev) => {
+          const variantOf = new Map(prev.map((i) => [i.id, i.variantId]));
+          const remaining = [...data.prices];
+          const lastByVariant = new Map<string, CalculatedLinePrice>();
+          const byKey = new Map<string, CalculatedLinePrice>();
+          for (const key of data.keys) {
+            const variantId = variantOf.get(key);
+            if (!variantId) continue;
+            const index = remaining.findIndex((p) => p.variantId === variantId);
+            const price =
+              index >= 0
+                ? remaining.splice(index, 1)[0]
+                : lastByVariant.get(variantId);
+            if (!price) continue;
+            byKey.set(key, price);
+            lastByVariant.set(variantId, price);
+          }
+          return prev.map((item) => {
+            const price = byKey.get(item.id);
+            if (!price || item.priceOverride !== null) return item;
+            return {
+              ...item,
+              originalUnitPrice: price.originalUnitPrice,
+              discountedUnitPrice: price.discountedUnitPrice,
+            };
+          });
+        });
+      }
+    }
+    setPendingPriceIds((prev) => (prev.size > 0 ? new Set() : prev));
+  }, [priceFetcher.state, priceFetcher.data]);
+
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -300,6 +442,9 @@ const DraftOrderDetailPage = () => {
           const variantImage =
             variant.image?.originalSrc || variant.image?.url || productImage;
 
+          // The picker's price is the retail price. No override is set, so
+          // Shopify prices the line for this customer on save (a B2B draft
+          // gets the company's catalog price); the preview below shows it.
           itemsToAdd.push({
             id: `new-${variant.id}-${Date.now()}-${Math.random()}`,
             variantId: variant.id,
@@ -311,6 +456,9 @@ const DraftOrderDetailPage = () => {
                 : null,
             quantity: 1,
             originalUnitPrice: variant.price || "0.00",
+            priceOverride: null,
+            appliedDiscount: null,
+            discountedUnitPrice: variant.price || "0.00",
             sku: variant.sku || null,
             image: variantImage,
             customAttributes: [],
@@ -320,9 +468,10 @@ const DraftOrderDetailPage = () => {
 
       if (itemsToAdd.length > 0) {
         setLineItems([...lineItems, ...itemsToAdd]);
+        requestPrices(itemsToAdd);
       }
     }
-  }, [shopify, lineItems]);
+  }, [shopify, lineItems, requestPrices]);
 
   const handleSave = useCallback(() => {
     isSavingRef.current = true;
@@ -330,12 +479,15 @@ const DraftOrderDetailPage = () => {
     formData.append(
       "lineItems",
       JSON.stringify(
-        lineItems.map((item) => ({
-          variantId: item.variantId,
-          quantity: item.quantity,
-          originalUnitPrice: item.originalUnitPrice,
-          customAttributes: item.customAttributes,
-        })),
+        lineItems.map(
+          (item): LineItemPayload => ({
+            variantId: item.variantId,
+            quantity: item.quantity,
+            priceOverride: item.priceOverride,
+            appliedDiscount: item.appliedDiscount,
+            customAttributes: item.customAttributes,
+          }),
+        ),
       ),
     );
     formData.append("currencyCode", draftOrder.currencyCode);
@@ -361,13 +513,34 @@ const DraftOrderDetailPage = () => {
     [],
   );
 
+  // Typing a price makes it a custom price: Shopify keeps it as is, instead
+  // of the catalog price, until the merchant drops it again.
   const handlePriceChange = useCallback((itemId: string, price: string) => {
     setLineItems((prev) =>
       prev.map((item) =>
-        item.id === itemId ? { ...item, originalUnitPrice: price } : item,
+        item.id === itemId
+          ? {
+              ...item,
+              originalUnitPrice: price,
+              priceOverride: price,
+              discountedUnitPrice: discountedUnitFor(item, price),
+            }
+          : item,
       ),
     );
   }, []);
+
+  const handleUseCatalogPrice = useCallback(
+    (itemId: string) => {
+      const item = lineItems.find((it) => it.id === itemId);
+      if (!item) return;
+      const reset = { ...item, priceOverride: null };
+      setLineItems((prev) => prev.map((it) => (it.id === itemId ? reset : it)));
+      // The row shows the old custom price until the preview comes back.
+      requestPrices([reset]);
+    },
+    [lineItems, requestPrices],
+  );
 
   const handlePropertiesChange = useCallback(
     (itemId: string, properties: CustomAttribute[]) => {
@@ -411,7 +584,10 @@ const DraftOrderDetailPage = () => {
           readOnly={readOnly}
           templates={orderAttributeTemplates}
         />
-        <CustomerCard customer={draftOrder.customer} />
+        <CustomerCard
+          customer={draftOrder.customer}
+          purchasingCompany={draftOrder.purchasingCompany}
+        />
         <AddressCard
           title="Shipping address"
           addressLines={formatAddressLines(draftOrder.shippingAddress)}
@@ -537,6 +713,8 @@ const DraftOrderDetailPage = () => {
                       onPriceChange={(price) =>
                         handlePriceChange(item.id, price)
                       }
+                      onUseCatalogPrice={() => handleUseCatalogPrice(item.id)}
+                      pricePending={pendingPriceIds.has(item.id)}
                       onPropertiesChange={(properties) =>
                         handlePropertiesChange(item.id, properties)
                       }

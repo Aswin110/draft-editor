@@ -2,6 +2,7 @@ import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import {
   createDraftOrder,
+  resolvePurchasingEntity,
   type CreateDraftOrderLineInput,
 } from "../models/draft-order.server";
 
@@ -27,6 +28,12 @@ interface CartItemPayload {
  * Requires a logged-in customer: Shopify appends a signed `logged_in_customer_id`
  * to proxied requests, which we attach to the draft so it carries the customer's
  * details. Guests are rejected (the storefront sends them to log in first).
+ *
+ * A B2B shopper's cart shows their company location's catalog prices. The theme
+ * block sends that company and location (from Liquid's `customer.current_company`
+ * and `customer.current_location`), and the draft is created for the company
+ * once the Admin API confirms the customer is a contact there. Otherwise the
+ * draft would be priced at retail.
  */
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin } = await authenticate.public.appProxy(request);
@@ -50,9 +57,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
   const customerId = `gid://shopify/Customer/${loggedInCustomerId}`;
 
-  let body: { items?: unknown };
+  let body: { items?: unknown; companyId?: unknown; companyLocationId?: unknown };
   try {
-    body = (await request.json()) as { items?: unknown };
+    body = (await request.json()) as typeof body;
   } catch {
     return Response.json(
       { success: false, error: "Invalid request body" },
@@ -111,8 +118,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 
+  // Liquid gives numeric ids; the Admin API wants gids. Anything else is ignored.
+  const numeric = (value: unknown): string | null => {
+    const text = String(value ?? "").trim();
+    return /^\d+$/.test(text) ? text : null;
+  };
+  const companyId = numeric(body.companyId);
+  const companyLocationId = numeric(body.companyLocationId);
+  const requestedCompany =
+    companyId && companyLocationId
+      ? {
+          companyId: `gid://shopify/Company/${companyId}`,
+          companyLocationId: `gid://shopify/CompanyLocation/${companyLocationId}`,
+        }
+      : null;
+
   try {
-    const result = await createDraftOrder(admin, customerId, lineItems);
+    const { purchasingEntity, warning } = await resolvePurchasingEntity(
+      admin,
+      customerId,
+      requestedCompany,
+    );
+    if (warning) console.warn("create-draft-order proxy:", warning);
+    const result = await createDraftOrder(admin, purchasingEntity, lineItems);
     return Response.json(result, { status: result.success ? 200 : 400 });
   } catch (error) {
     console.error("create-draft-order proxy error:", error);

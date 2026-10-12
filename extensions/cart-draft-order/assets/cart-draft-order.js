@@ -55,13 +55,22 @@
           };
         });
 
+        // Present only for a logged-in B2B customer with a location selected
+        // (see the data attributes in the block). Lets the draft carry the
+        // company location, and with it the catalog prices the cart showed.
+        var payload = { items: items };
+        if (root.dataset.companyId && root.dataset.companyLocationId) {
+          payload.companyId = root.dataset.companyId;
+          payload.companyLocationId = root.dataset.companyLocationId;
+        }
+
         var response = await fetch(root.dataset.proxyUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Accept: "application/json",
           },
-          body: JSON.stringify({ items: items }),
+          body: JSON.stringify(payload),
         });
         var data = await response.json();
 
