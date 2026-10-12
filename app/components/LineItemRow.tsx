@@ -51,8 +51,7 @@ export const LineItemRow = ({
     : item.originalUnitPrice;
   const totalAmount = (parseFloat(unitPaid || "0") * item.quantity).toFixed(2);
   const hasCustomPrice = item.priceOverride !== null;
-  const showPricingNotes =
-    pricePending || item.appliedDiscount !== null || hasCustomPrice;
+  const showPricingNotes = item.appliedDiscount !== null || hasCustomPrice;
 
   const {
     attributes,
@@ -165,16 +164,28 @@ export const LineItemRow = ({
               ) : (
                 <>
                   <s-box inlineSize="180px">
-                    <s-number-field
-                      label="Price"
-                      labelAccessibilityVisibility="exclusive"
-                      value={item.originalUnitPrice}
-                      onInput={handlePriceChange}
-                      onBlur={handlePriceBlur}
-                      min={0}
-                      step={0.01}
-                      autocomplete="off"
-                    ></s-number-field>
+                    {pricePending ? (
+                      // The picker only knows the retail price; don't flash
+                      // it while Shopify works out what this customer pays.
+                      <s-number-field
+                        label="Price"
+                        labelAccessibilityVisibility="exclusive"
+                        value=""
+                        placeholder="Fetching price…"
+                        disabled
+                      ></s-number-field>
+                    ) : (
+                      <s-number-field
+                        label="Price"
+                        labelAccessibilityVisibility="exclusive"
+                        value={item.originalUnitPrice}
+                        onInput={handlePriceChange}
+                        onBlur={handlePriceBlur}
+                        min={0}
+                        step={0.01}
+                        autocomplete="off"
+                      ></s-number-field>
+                    )}
                   </s-box>
                   <s-text color="subdued">×</s-text>
                   <s-box inlineSize="80px">
@@ -189,7 +200,7 @@ export const LineItemRow = ({
                   </s-box>
                   <s-text color="subdued">=</s-text>
                   <s-text type="strong">
-                    {currencyCode} {totalAmount}
+                    {pricePending ? "—" : `${currencyCode} ${totalAmount}`}
                   </s-text>
                   <s-button
                     icon="x"
@@ -206,9 +217,6 @@ export const LineItemRow = ({
         {showPricingNotes && (
           <s-box paddingInlineStart="large-500">
             <s-stack direction="inline" gap="base" alignItems="center">
-              {pricePending && (
-                <s-text color="subdued">Checking the customer&apos;s price…</s-text>
-              )}
               {item.appliedDiscount && (
                 <s-text color="subdued">
                   {discountLabel(item.appliedDiscount, currencyCode)}:{" "}
