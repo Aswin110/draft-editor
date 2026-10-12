@@ -4,6 +4,7 @@ import type {
   DraftOrderDetail,
   DraftOrderVariantOptions,
   LineItem,
+  LineItemDiscount,
   PageInfo,
 } from "../types/draft-order";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
@@ -57,6 +58,22 @@ const DRAFT_ORDER_QUERY = `#graphql
       customAttributes {
         key
         value
+      }
+      purchasingEntity {
+        __typename
+        ... on PurchasingCompany {
+          company {
+            id
+            name
+          }
+          location {
+            id
+            name
+          }
+          contact {
+            id
+          }
+        }
       }
       subtotalPriceSet {
         shopMoney {
@@ -123,6 +140,25 @@ const DRAFT_ORDER_QUERY = `#graphql
             originalUnitPriceSet {
               shopMoney {
                 amount
+              }
+            }
+            approximateDiscountedUnitPriceSet {
+              shopMoney {
+                amount
+              }
+            }
+            priceOverride {
+              amount
+            }
+            appliedDiscount {
+              title
+              description
+              value
+              valueType
+              amountSet {
+                shopMoney {
+                  amount
+                }
               }
             }
             customAttributes {
@@ -499,6 +535,30 @@ export const getDraftOrderVariantOptions = async (
   return result;
 };
 
+interface AppliedDiscountNode {
+  title?: string | null;
+  description?: string | null;
+  value: number;
+  valueType: string;
+  amountSet?: { shopMoney: { amount: string | null } } | null;
+}
+
+const mapLineDiscount = (
+  discount: AppliedDiscountNode | null | undefined,
+): LineItemDiscount | null =>
+  discount
+    ? {
+        title: discount.title ?? null,
+        description: discount.description ?? null,
+        value: Number(discount.value),
+        valueType:
+          discount.valueType === "FIXED_AMOUNT" ? "FIXED_AMOUNT" : "PERCENTAGE",
+        amount: parseFloat(discount.amountSet?.shopMoney.amount || "0").toFixed(
+          2,
+        ),
+      }
+    : null;
+
 export interface GetDraftOrdersOptions {
   first?: number;
   last?: number;
@@ -571,11 +631,30 @@ export const getDraftOrder = async (
       originalUnitPrice: parseFloat(
         edge.node.originalUnitPriceSet.shopMoney.amount || "0",
       ).toFixed(2),
+      priceOverride: edge.node.priceOverride
+        ? parseFloat(edge.node.priceOverride.amount || "0").toFixed(2)
+        : null,
+      appliedDiscount: mapLineDiscount(edge.node.appliedDiscount),
+      discountedUnitPrice: parseFloat(
+        edge.node.approximateDiscountedUnitPriceSet.shopMoney.amount || "0",
+      ).toFixed(2),
       customAttributes: (edge.node.customAttributes || []).map((attr) => ({
         key: attr.key,
         value: attr.value ?? "",
       })),
     })) || [];
+
+  const purchasingEntity = draftOrder.purchasingEntity;
+  const purchasingCompany =
+    purchasingEntity && purchasingEntity.__typename === "PurchasingCompany"
+      ? {
+          companyId: purchasingEntity.company.id,
+          companyLocationId: purchasingEntity.location.id,
+          companyContactId: purchasingEntity.contact?.id ?? "",
+          companyName: purchasingEntity.company.name,
+          locationName: purchasingEntity.location.name ?? null,
+        }
+      : null;
 
   return {
     id: draftOrder.id,
@@ -597,6 +676,7 @@ export const getDraftOrder = async (
           email: draftOrder.customer.defaultEmailAddress?.emailAddress ?? null,
         }
       : null,
+    purchasingCompany,
     shippingAddress: draftOrder.shippingAddress
       ? {
           name: draftOrder.shippingAddress.name ?? null,
@@ -632,10 +712,56 @@ export const getDraftOrder = async (
 export interface UpdateLineItemsInput {
   variantId: string | null;
   quantity: number;
-  originalUnitPrice: string;
+  /**
+   * Custom unit price for the line, or null to let Shopify price it from the
+   * customer's catalog. Only lines the merchant actually priced carry one.
+   * Sending an override for every line pinned B2B drafts at whatever the
+   * catalog said at save time and put newly added products in at retail,
+   * which is how wholesale drafts came out at full price.
+   */
+  priceOverride: string | null;
   currencyCode: string;
+  /** The line's existing discount, sent back as read so a save keeps it. */
+  appliedDiscount?: LineItemDiscount | null;
   customAttributes?: { key: string; value: string }[];
 }
+
+const toAppliedDiscountInput = (discount: LineItemDiscount) => ({
+  ...(discount.title ? { title: discount.title } : {}),
+  ...(discount.description ? { description: discount.description } : {}),
+  value: discount.value,
+  valueType: discount.valueType,
+});
+
+/**
+ * Builds Shopify's `DraftOrderLineItemInput` list. Exported so the price
+ * calculation and tests send exactly what a save sends.
+ */
+export const buildLineItemsInput = (lineItems: UpdateLineItemsInput[]) =>
+  lineItems
+    .filter((item) => item.variantId !== null)
+    .map((item) => ({
+      variantId: item.variantId,
+      quantity: item.quantity,
+      ...(item.priceOverride !== null
+        ? {
+            priceOverride: {
+              amount: parseFloat(item.priceOverride || "0").toFixed(2),
+              currencyCode: item.currencyCode as CurrencyCode,
+            },
+          }
+        : {}),
+      ...(item.appliedDiscount
+        ? { appliedDiscount: toAppliedDiscountInput(item.appliedDiscount) }
+        : {}),
+      ...(item.customAttributes && item.customAttributes.length > 0
+        ? {
+            customAttributes: item.customAttributes.filter(
+              (attr) => attr.key.trim() !== "",
+            ),
+          }
+        : {}),
+    }));
 
 export const updateDraftOrderLineItems = async (
   admin: AdminApiContext,
@@ -644,27 +770,11 @@ export const updateDraftOrderLineItems = async (
   customAttributes?: { key: string; value: string }[],
   note?: string,
 ): Promise<{ success: boolean; error?: string }> => {
-  const validLineItems = lineItems.filter((item) => item.variantId !== null);
+  const lineItemsInput = buildLineItemsInput(lineItems);
 
-  if (validLineItems.length === 0) {
+  if (lineItemsInput.length === 0) {
     return { success: false, error: "No valid line items to update" };
   }
-
-  const lineItemsInput = validLineItems.map((item) => ({
-    variantId: item.variantId,
-    quantity: item.quantity,
-    priceOverride: {
-      amount: parseFloat(item.originalUnitPrice || "0").toFixed(2),
-      currencyCode: item.currencyCode as CurrencyCode,
-    },
-    ...(item.customAttributes && item.customAttributes.length > 0
-      ? {
-          customAttributes: item.customAttributes.filter(
-            (attr) => attr.key.trim() !== "",
-          ),
-        }
-      : {}),
-  }));
 
   const input: Record<string, unknown> = {
     lineItems: lineItemsInput,
@@ -695,6 +805,170 @@ export const updateDraftOrderLineItems = async (
   return { success: true };
 };
 
+const DRAFT_PURCHASING_ENTITY_QUERY = `#graphql
+  query getDraftOrderPurchasingEntity($id: ID!) {
+    draftOrder(id: $id) {
+      id
+      purchasingEntity {
+        __typename
+        ... on Customer {
+          id
+        }
+        ... on PurchasingCompany {
+          company {
+            id
+          }
+          location {
+            id
+          }
+          contact {
+            id
+          }
+        }
+      }
+    }
+  }
+`;
+
+const CALCULATE_DRAFT_ORDER_MUTATION = `#graphql
+  mutation draftOrderCalculate($input: DraftOrderInput!) {
+    draftOrderCalculate(input: $input) {
+      calculatedDraftOrder {
+        lineItems {
+          variant {
+            id
+          }
+          quantity
+          originalUnitPriceSet {
+            shopMoney {
+              amount
+            }
+          }
+          approximateDiscountedUnitPriceSet {
+            shopMoney {
+              amount
+            }
+          }
+        }
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
+export type PurchasingEntityInput =
+  | { customerId: string }
+  | {
+      purchasingCompany: {
+        companyId: string;
+        companyLocationId: string;
+        companyContactId: string;
+      };
+    };
+
+interface PurchasingEntityNode {
+  __typename: string;
+  id?: string;
+  company?: { id: string };
+  location?: { id: string };
+  contact?: { id: string } | null;
+}
+
+const toPurchasingEntityInput = (
+  node: PurchasingEntityNode | null | undefined,
+): PurchasingEntityInput | null => {
+  if (!node) return null;
+  if (node.__typename === "PurchasingCompany" && node.company && node.location) {
+    return {
+      purchasingCompany: {
+        companyId: node.company.id,
+        companyLocationId: node.location.id,
+        companyContactId: node.contact?.id ?? "",
+      },
+    };
+  }
+  return node.id ? { customerId: node.id } : null;
+};
+
+export interface CalculatedLinePrice {
+  variantId: string;
+  originalUnitPrice: string;
+  discountedUnitPrice: string;
+}
+
+/**
+ * Asks Shopify what it would charge for these lines on this draft, without
+ * saving anything. The product picker only knows retail prices, so when a
+ * merchant adds products to a B2B draft this is how the editor shows the
+ * company's catalog price right away. Also used when a custom price is
+ * dropped, to show what the catalog says.
+ *
+ * Results come back in Shopify's order, which follows the input; the caller
+ * matches them to its rows by variant.
+ */
+export const calculateLineItemPrices = async (
+  admin: AdminApiContext,
+  draftOrderId: string,
+  lineItems: UpdateLineItemsInput[],
+): Promise<CalculatedLinePrice[]> => {
+  const lineItemsInput = buildLineItemsInput(lineItems);
+  if (lineItemsInput.length === 0) return [];
+
+  const entityResponse = await admin.graphql(DRAFT_PURCHASING_ENTITY_QUERY, {
+    variables: { id: draftOrderId },
+  });
+  const { data: entityData } = (await entityResponse.json()) as {
+    data?: {
+      draftOrder?: { purchasingEntity: PurchasingEntityNode | null } | null;
+    };
+  };
+  const purchasingEntity = toPurchasingEntityInput(
+    entityData?.draftOrder?.purchasingEntity,
+  );
+
+  const input: Record<string, unknown> = { lineItems: lineItemsInput };
+  if (purchasingEntity) input.purchasingEntity = purchasingEntity;
+
+  const response = await admin.graphql(CALCULATE_DRAFT_ORDER_MUTATION, {
+    variables: { input },
+  });
+  const { data } = (await response.json()) as {
+    data?: {
+      draftOrderCalculate?: {
+        calculatedDraftOrder: {
+          lineItems: {
+            variant: { id: string } | null;
+            quantity: number;
+            originalUnitPriceSet: { shopMoney: { amount: string } };
+            approximateDiscountedUnitPriceSet: { shopMoney: { amount: string } };
+          }[];
+        } | null;
+        userErrors: { message: string }[];
+      } | null;
+    };
+  };
+
+  const payload = data?.draftOrderCalculate;
+  if (!payload?.calculatedDraftOrder || payload.userErrors.length > 0) {
+    throw new Error(
+      payload?.userErrors[0]?.message ?? "Unable to calculate prices",
+    );
+  }
+
+  return payload.calculatedDraftOrder.lineItems.map((line) => ({
+    variantId: line.variant?.id ?? "",
+    originalUnitPrice: parseFloat(
+      line.originalUnitPriceSet.shopMoney.amount || "0",
+    ).toFixed(2),
+    discountedUnitPrice: parseFloat(
+      line.approximateDiscountedUnitPriceSet.shopMoney.amount || "0",
+    ).toFixed(2),
+  }));
+};
+
 export interface CreateDraftOrderLineInput {
   variantId: string;
   quantity: number;
@@ -702,16 +976,16 @@ export interface CreateDraftOrderLineInput {
 }
 
 /**
- * Creates a new draft order on behalf of a customer — used by the storefront
- * cart "Create draft order" button (via the App Proxy route). The customer is
- * attached through `purchasingEntity`, so the draft inherits their name, email,
- * and saved addresses. Prices come from the catalog (no client-supplied price).
- *
- * @param customerId - The customer's gid (e.g. "gid://shopify/Customer/123").
+ * Creates a new draft order from the storefront cart "Create draft order"
+ * button (via the App Proxy route). The purchasing entity comes from
+ * `resolvePurchasingEntity`: a B2B shopper's company location, so Shopify
+ * applies that location's catalog prices, or the plain customer otherwise.
+ * Prices always come from Shopify (no client-supplied price), and automatic
+ * discounts are accepted so the draft matches the cart the shopper just saw.
  */
 export const createDraftOrder = async (
   admin: AdminApiContext,
-  customerId: string,
+  purchasingEntity: PurchasingEntityInput,
   lineItems: CreateDraftOrderLineInput[],
 ): Promise<{
   success: boolean;
@@ -724,7 +998,8 @@ export const createDraftOrder = async (
   }
 
   const input = {
-    purchasingEntity: { customerId },
+    purchasingEntity,
+    acceptAutomaticDiscounts: true,
     lineItems: lineItems.map((item) => ({
       variantId: item.variantId,
       quantity: item.quantity,
@@ -760,6 +1035,126 @@ export const createDraftOrder = async (
   };
 };
 
+const CUSTOMER_COMPANY_CONTACTS_QUERY = `#graphql
+  query getCustomerCompanyContacts($id: ID!) {
+    customer(id: $id) {
+      id
+      companyContactProfiles {
+        id
+        company {
+          id
+          name
+        }
+        roleAssignments(first: 50) {
+          nodes {
+            companyLocation {
+              id
+              name
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+interface CompanyContactProfileNode {
+  id: string;
+  company: { id: string; name: string };
+  roleAssignments: {
+    nodes: { companyLocation: { id: string; name: string } }[];
+  };
+}
+
+export interface ResolvedPurchasingEntity {
+  purchasingEntity: PurchasingEntityInput;
+  /** Set when the customer is a company contact but the draft had to be personal. */
+  warning?: string;
+}
+
+/**
+ * Works out who a draft created for `customerId` should be purchased as.
+ *
+ * A B2B contact only gets catalog pricing when the draft names their company
+ * location; a bare `customerId` creates the draft at retail prices. When the
+ * storefront says which location the shopper is buying for, use it once the
+ * customer is confirmed to be a contact with a role there (the location id
+ * comes from the browser, so it is never trusted on its own). Without a
+ * requested location, a contact at exactly one location gets that one. In
+ * every other case the draft is personal, and the warning says why.
+ */
+export const resolvePurchasingEntity = async (
+  admin: AdminApiContext,
+  customerId: string,
+  requested?: { companyId: string; companyLocationId: string } | null,
+): Promise<ResolvedPurchasingEntity> => {
+  const personal: ResolvedPurchasingEntity = {
+    purchasingEntity: { customerId },
+  };
+
+  let profiles: CompanyContactProfileNode[] = [];
+  try {
+    const response = await admin.graphql(CUSTOMER_COMPANY_CONTACTS_QUERY, {
+      variables: { id: customerId },
+    });
+    const { data } = (await response.json()) as {
+      data?: {
+        customer?: {
+          companyContactProfiles: CompanyContactProfileNode[] | null;
+        } | null;
+      };
+    };
+    profiles = data?.customer?.companyContactProfiles ?? [];
+  } catch (error) {
+    // Stores without B2B reject the field; a personal draft is right there.
+    console.warn("companyContactProfiles lookup failed:", error);
+    return personal;
+  }
+
+  const seen = new Set<string>();
+  const memberships = profiles.flatMap((profile) =>
+    profile.roleAssignments.nodes
+      .filter((role) => {
+        if (seen.has(role.companyLocation.id)) return false;
+        seen.add(role.companyLocation.id);
+        return true;
+      })
+      .map((role) => ({
+        companyId: profile.company.id,
+        companyContactId: profile.id,
+        companyLocationId: role.companyLocation.id,
+      })),
+  );
+  if (memberships.length === 0) return personal;
+
+  const asCompany = (
+    membership: (typeof memberships)[number],
+  ): ResolvedPurchasingEntity => ({
+    purchasingEntity: { purchasingCompany: membership },
+  });
+
+  if (requested) {
+    const match = memberships.find(
+      (m) =>
+        m.companyId === requested.companyId &&
+        m.companyLocationId === requested.companyLocationId,
+    );
+    if (match) return asCompany(match);
+    return {
+      ...personal,
+      warning:
+        "The customer isn't a contact at the requested company location, so the draft was created as a personal order.",
+    };
+  }
+
+  if (memberships.length === 1) return asCompany(memberships[0]);
+
+  return {
+    ...personal,
+    warning: `This customer orders for ${memberships.length} company locations, so the draft was created as a personal order. Pick the company location on the draft to apply its catalog pricing.`,
+  };
+};
+
 // Fetches everything needed to safely apply a customer-driven edit in one
 // round trip: ownership (customer id), status, and each line item's variant
 // plus its product's other variants (for validating a variant switch and
@@ -788,6 +1183,20 @@ const CUSTOMER_DRAFT_UPDATE_QUERY = `#graphql
               key
               value
             }
+            priceOverride {
+              amount
+            }
+            appliedDiscount {
+              title
+              description
+              value
+              valueType
+              amountSet {
+                shopMoney {
+                  amount
+                }
+              }
+            }
             variant {
               id
               product {
@@ -795,7 +1204,6 @@ const CUSTOMER_DRAFT_UPDATE_QUERY = `#graphql
                   edges {
                     node {
                       id
-                      price
                     }
                   }
                 }
@@ -821,10 +1229,12 @@ interface DraftOrderForCustomerUpdate {
           shopMoney: { amount: string | null; currencyCode: string | null };
         };
         customAttributes: { key: string; value: string | null }[];
+        priceOverride: { amount: string } | null;
+        appliedDiscount: AppliedDiscountNode | null;
         variant: {
           id: string;
           product: {
-            variants: { edges: { node: { id: string; price: string } }[] };
+            variants: { edges: { node: { id: string } }[] };
           };
         } | null;
       };
@@ -846,9 +1256,10 @@ const numericId = (gid: string): string | undefined =>
  *
  * The new line items are reconstructed from authoritative server-side data; the
  * client only chooses a quantity and a target variant. A variant switch is
- * validated to belong to the same product, and its price is taken from the
- * catalog — the client can never set an arbitrary price or swap in a different
- * product.
+ * validated to belong to the same product, and the new variant is priced by
+ * Shopify for this customer (catalog or B2B price list) — the client can never
+ * set an arbitrary price or swap in a different product. A custom price or
+ * discount the merchant put on a line is kept as long as the variant stays.
  *
  * @param quantities - Map of line item gid -> new quantity (must be >= 1).
  * @param variants - Map of line item gid -> target variant gid.
@@ -905,15 +1316,17 @@ export const updateCustomerDraftOrderLineItems = async (
   for (const node of nodes) {
     const variant = node.variant!;
     let variantId = variant.id;
-    // Preserve any existing (merchant-set) price when the variant is unchanged.
-    let unitPrice = parseFloat(
-      node.originalUnitPriceSet.shopMoney.amount || "0",
-    ).toFixed(2);
+    // A custom price the merchant set stays with the line; a line priced from
+    // the catalog stays that way too (no override), so a B2B price list keeps
+    // applying after the customer's edit.
+    let priceOverride = node.priceOverride
+      ? parseFloat(node.priceOverride.amount || "0").toFixed(2)
+      : null;
 
     const requestedVariantId = variants[node.id];
     if (requestedVariantId && requestedVariantId !== variant.id) {
-      // The target variant must belong to the same product, and its price is
-      // taken from the catalog rather than from the client.
+      // The target variant must belong to the same product. Its price is left
+      // to Shopify: a custom price set for the old variant doesn't carry over.
       const match = variant.product.variants.edges.find(
         (edge) => edge.node.id === requestedVariantId,
       );
@@ -921,14 +1334,15 @@ export const updateCustomerDraftOrderLineItems = async (
         return { success: false, error: "Invalid variant selected" };
       }
       variantId = requestedVariantId;
-      unitPrice = parseFloat(match.node.price || "0").toFixed(2);
+      priceOverride = null;
     }
 
     lineItems.push({
       variantId,
       quantity: quantities[node.id] ?? node.quantity,
-      originalUnitPrice: unitPrice,
+      priceOverride,
       currencyCode,
+      appliedDiscount: mapLineDiscount(node.appliedDiscount),
       // Customer-edited attributes replace the existing set when provided;
       // otherwise the merchant's existing attributes are preserved.
       customAttributes: (

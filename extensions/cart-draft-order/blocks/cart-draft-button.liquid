@@ -50,6 +50,15 @@
   class="cart-draft-order cart-draft-order--{{ uid }}"
   data-proxy-url="/apps/draft-cart/create-draft-order"
   data-logged-in="{{ is_logged_in }}"
+  {%- comment -%}
+    A B2B shopper sees their company location's catalog prices in the cart.
+    Pass the company and location along so the draft is created for them and
+    priced the same way; the app verifies the customer belongs there.
+  {%- endcomment -%}
+  {%- if customer and customer.b2b? and customer.current_company and customer.current_location -%}
+  data-company-id="{{ customer.current_company.id }}"
+  data-company-location-id="{{ customer.current_location.id }}"
+  {%- endif -%}
   data-login-url="{{ routes.account_login_url }}"
   data-return-url="{{ routes.cart_url }}"
   data-success-message="{{ s.success_message | escape }}"
