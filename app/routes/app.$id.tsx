@@ -354,6 +354,14 @@ const DraftOrderDetailPage = () => {
     const data = priceFetcher.data;
     if (data && data !== appliedPreviewRef.current) {
       appliedPreviewRef.current = data;
+      if (!data.success) {
+        // Rows keep the picker's retail price; say so, since for a B2B draft
+        // that number is not what the customer will pay.
+        shopify.toast.show(
+          "Couldn't fetch the customer's price. Shopify sets it when you save.",
+          { isError: true },
+        );
+      }
       if (data.success) {
         setLineItems((prev) => {
           const variantOf = new Map(prev.map((i) => [i.id, i.variantId]));
@@ -385,7 +393,7 @@ const DraftOrderDetailPage = () => {
       }
     }
     setPendingPriceIds((prev) => (prev.size > 0 ? new Set() : prev));
-  }, [priceFetcher.state, priceFetcher.data]);
+  }, [priceFetcher.state, priceFetcher.data, shopify]);
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
